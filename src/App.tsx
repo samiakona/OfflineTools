@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
+import { HashRouter, Routes, Route } from 'react-router-dom';
 
 // ডাটাবেজ ইম্পোর্ট (আপনার সঠিক পাথ অনুযায়ী চেক করে নিতে পারেন)
 import { db } from './db'; 
@@ -13,7 +13,7 @@ import { Footer } from './components/Layout/Footer';
 
 // একটি সাহায্যকারী কম্পোনেন্ট যাতে টপবারের সাথে রাউটার নেভিগেশন সহজে করা যায়
 const DashboardLayout: React.FC = () => {
-  const navigate = useNavigate();
+  
   
   // ফাইল ইনপুটের জন্য একটি রিফ (Ref)
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -140,9 +140,9 @@ const DashboardLayout: React.FC = () => {
 
 const App: React.FC = () => {
   return (
-    <BrowserRouter>
+    <HashRouter>
       <DashboardLayout />
-    </BrowserRouter>
+    </HashRouter>
   );
 };
 
