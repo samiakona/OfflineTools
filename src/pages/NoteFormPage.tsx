@@ -202,10 +202,11 @@ export const NoteFormPage: React.FC = () => {
         )}
       </div>
 
-      <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-slate-200/70 shadow-xs p-6 sm:p-8 space-y-8">
+      {/* 📦 Form Container: হালকা ব্যাকগ্রাউন্ড এবং সেকশনগুলোর মাঝে গ্যাপ বাড়ানোর জন্য space-y-6 ব্যবহার করা হয়েছে */}
+      <form onSubmit={handleSubmit} className="bg-slate-50/60 rounded-2xl p-2 sm:p-4 space-y-6">
         
-        {/* 📅 Section 1: Timestamp & Duration */}
-        <div className="bg-slate-50/40 p-5 rounded-2xl border border-slate-200/50 grid grid-cols-1 md:grid-cols-3 gap-5">
+        {/* 📅 Card 1: Timestamp & Duration */}
+        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/70 shadow-xs grid grid-cols-1 md:grid-cols-3 gap-5">
           <div>
             <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
               <Calendar size={13} className="text-slate-400" /> Date *
@@ -245,8 +246,8 @@ export const NoteFormPage: React.FC = () => {
           </div>
         </div>
 
-        {/* 👤 Section 2: People Involvement */}
-        <div className="space-y-4">
+        {/* 👤 Card 2: People Involvement */}
+        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/70 shadow-xs space-y-4">
           <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5 text-blue-700 font-extrabold text-xs tracking-wider uppercase">
             <div className="p-1 bg-blue-50 rounded-md"><User size={14} /></div>
             <span>People Involvement</span>
@@ -281,8 +282,8 @@ export const NoteFormPage: React.FC = () => {
           </div>
         </div>
 
-        {/* 💼 Section 3: Appointment & Service Configurations */}
-        <div className="space-y-4">
+        {/* 💼 Card 3: Appointment & Service Configurations */}
+        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/70 shadow-xs space-y-4">
           <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5 text-blue-700 font-extrabold text-xs tracking-wider uppercase">
             <div className="p-1 bg-blue-50 rounded-md"><Briefcase size={14} /></div>
             <span>Appointment & Service Configuration</span>
@@ -389,8 +390,8 @@ export const NoteFormPage: React.FC = () => {
           </div>
         </div>
 
-        {/* 📝 Section 4: Case Log Narrative */}
-        <div className="space-y-4">
+        {/* 📝 Card 4: Case Log Narrative */}
+        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/70 shadow-xs space-y-4">
           <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5 text-blue-700 font-extrabold text-xs tracking-wider uppercase">
             <div className="p-1 bg-blue-50 rounded-md"><Layers size={14} /></div>
             <span>Case Log Narrative</span>
@@ -418,8 +419,8 @@ export const NoteFormPage: React.FC = () => {
           </div>
         </div>
 
-        {/* 👥 Section 5: Assignment & Extra Attendees */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+        {/* 👥 Card 5: Assignment & Extra Attendees */}
+        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/70 shadow-xs grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label className="block text-[11px] font-bold text-slate-600 tracking-wide mb-1.5">Primary Team Member</label>
             <CustomSelect 
@@ -439,8 +440,8 @@ export const NoteFormPage: React.FC = () => {
           </div>
         </div>
 
-        {/* 🔔 Section 6: Functional Line-Only Checkbox Panel */}
-        <div className="space-y-3.5 pt-1.5">
+        {/* 🔔 Card 6: Functional Checkbox Panel */}
+        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/70 shadow-xs space-y-3.5">
           {/* Checkbox item 1: Notify Team */}
           <div 
             onClick={() => !isReadOnly && updateField('notifyTeam', !formData.notifyTeam)}
@@ -454,9 +455,7 @@ export const NoteFormPage: React.FC = () => {
                 disabled={isReadOnly}
                 className="sr-only" 
               />
-              {/* Custom border box design */}
               <div className={`w-5 h-5 bg-white border rounded-md flex items-center justify-center transition-all shadow-3xs group-hover:border-slate-400 ${formData.notifyTeam ? 'border-blue-600' : 'border-slate-300'}`}>
-                {/* Independent checkmark icon logic */}
                 {formData.notifyTeam && (
                   <Check size={14} strokeWidth={3} className="text-blue-600 animate-in zoom-in-75 duration-100" />
                 )}
@@ -497,9 +496,9 @@ export const NoteFormPage: React.FC = () => {
           </div>
         </div>
 
-        {/* 📝 Section 7: Audit Logs */}
+        {/* 📝 Card 7: Audit Logs */}
         {isEditMode && auditData && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-[11px] bg-slate-50/60 p-4 rounded-xl border border-slate-200/60 text-slate-500 font-medium shadow-3xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-[11px] bg-white p-5 rounded-2xl border border-slate-200/70 text-slate-500 font-medium shadow-xs">
             <div className="space-y-1">
               <p className="font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span> System Birth Log
@@ -518,7 +517,7 @@ export const NoteFormPage: React.FC = () => {
         )}
 
         {/* 🏁 Bottom Action Buttons Panel */}
-        <div className="flex justify-end items-center gap-3 pt-5 border-t border-slate-100">
+        <div className="flex justify-end items-center gap-3 pt-5 border-t border-slate-200/80">
           <button 
             type="button" 
             onClick={() => navigate('/')} 

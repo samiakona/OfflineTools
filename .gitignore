@@ -24,3 +24,19 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+
+
+
+# electroon build for desktop applicatio:
+# npm run electron:build    
+#.exe file create hbe.
+
+
+#for broweser support
+#npm run build korle
+# index.html creat hbe
+
+#for apk file create
+#cd android
+#.\gradlew assembleDebug
+#E:\Testing-components\HemaiyaOffline\android\app\build\outputs\apk\debug\

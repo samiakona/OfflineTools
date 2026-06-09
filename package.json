@@ -26,13 +26,17 @@
       "target": "nsis"
     },
     "mac": {
-    "target": "dmg"
-  },
-  "linux": {
-    "target": "AppImage"
-  }
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
   },
   "dependencies": {
+    "@capacitor/android": "^8.4.0",
+    "@capacitor/cli": "^8.4.0",
+    "@capacitor/core": "^8.4.0",
+    "@capacitor/ios": "^8.4.0",
     "dexie": "^4.4.3",
     "dexie-react-hooks": "^4.4.0",
     "lucide-react": "^1.17.0",
