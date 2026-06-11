@@ -2,7 +2,37 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Search, Plus, Trash2, Calendar, Clock, ChevronLeft, ChevronRight, Edit3, CloudLightning, Zap, WifiOff, X, AlertTriangle, CheckCircle2 } from 'lucide-react';
-import { db } from '../db';
+
+import { caseNoteService } from '../services/caseNoteService';
+import { useCaseNoteSync } from '../hooks/useCaseNoteSync';
+
+// Service Type Labels Mapping
+const SERVICE_TYPE_LABELS: Record<string, string> = {
+  '1': 'Child and Family Team',
+  '2': 'Residential Placement',
+  '3': 'Treatment Contract',
+  '4': 'N/A',
+  '5': 'Placement Contact',
+  '6': 'Parent Contact',
+  '7': 'Child Contact',
+  '8': 'Support Meeting',
+  '9': 'Court',
+  '10': 'Transportation',
+  '11': 'Supervised Visit',
+  '12': 'Medical',
+  '13': 'BH Contact (For Therapy)',
+  '14': 'School Contact',
+  '15': 'PIP',
+  '16': 'Obtaining Community Resources',
+  '17': 'General Case Management',
+  '18': 'Staffing with Supervisor',
+  '19': 'Staffing with Group',
+  '20': 'Legal',
+  '21': 'Closing Summary',
+  '22': 'PAP',
+  '23': 'Wizards and Fairies',
+  '24': 'Update Case Plan'
+};
 
 export const NoteList: React.FC = () => {
   const navigate = useNavigate();
@@ -10,20 +40,82 @@ export const NoteList: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
-  // 📝 মোডাল স্টেটসমূহ
+
+
+// for live data syncing
+const { isSyncing, syncProgress,syncNote, syncAllLocalNotes, checkAPI } = useCaseNoteSync();
+
+// Push All data
+// Push All data - প্রতিটি নোটের নিজস্ব caseName ব্যবহার করবে
+const handlePushAllData = async () => {
+  const apiOnline = await checkAPI();
+  
+  if (!apiOnline) {
+    setModalType('offline');
+    return;
+  }
+  
+  const allNotes = await caseNoteService.getAllNotes();
+  
+  if (allNotes.length === 0) {
+    alert('No notes to sync');
+    return;
+  }
+  
+  console.log('Total notes to sync:', allNotes.length);
+  
+  const result = await syncAllLocalNotes(allNotes);
+  
+  if (result.success) {
+    setModalType('push_success');
+  } else {
+    alert(`Sync completed with issues: ${result.message}`);
+  }
+};
+
+// Push Single data
+// Push Single data - caseName কে caseNumber হিসেবে ব্যবহার করুন
+// Push Single data
+const handlePushSingleNote = async (note: any) => {
+  // 🔴 নোট ভ্যালিড কিনা চেক করুন
+  if (!note) {
+    console.error('Note is undefined');
+    alert('Invalid note data');
+    return;
+  }
+  
+  console.log('Pushing note:', note);
+  
+  const apiOnline = await checkAPI();
+  
+  if (!apiOnline) {
+    setModalType('offline');
+    return;
+  }
+  
+  const caseNumber = note.caseName || note.caseNumber || 'DEFAULT-CASE';
+  
+  console.log('Case Number:', caseNumber);
+  
+  const result = await syncNote(caseNumber, note);
+  
+  if (result.success) {
+    alert(`Note synced successfully! Case: ${caseNumber}, Server ID: ${result.syncedId}`);
+  } else {
+    alert(`Sync failed: ${result.message}`);
+  }
+};
+
+
+
+
+
+
+  // মোডাল স্টেটসমূহ
   const [modalType, setModalType] = useState<'offline' | 'delete' | 'clear_db' | 'push_success' | 'none'>('none');
   const [selectedNoteId, setSelectedNoteId] = useState<number | null>(null);
 
-  // ডাটাবেজ থেকে রিয়েল-টাইম লাইভ কুয়েরি
-  const notes = useLiveQuery(() => db.caseNotes.orderBy('createdAt').reverse().toArray());
-
-  // কাস্টম মোডাল থেকে ডাটাবেজ সম্পূর্ণ ক্লিয়ার করার ফাংশন
-  const handleConfirmClearDatabase = async () => {
-    await db.caseNotes.clear();
-    setModalType('none');
-  };
-
-  // সিঙ্গেল রিমুভ বাটনে ক্লিক করলে মোডাল দেখাবে (id চেক সহ)
+  // সিঙ্গেল রিমুভ বাটনে ক্লিক করলে মোডাল দেখাবে
   const triggerRemoveNote = (id: number | undefined) => {
     if (id !== undefined) {
       setSelectedNoteId(id);
@@ -31,13 +123,34 @@ export const NoteList: React.FC = () => {
     }
   };
 
-  // কনফার্ম রিমুভ করার ফাংশন
+  // ডাটাবেজ থেকে রিয়েল-টাইম লাইভ কুয়েরি
+  const notes = useLiveQuery(async () => {
+    const allNotes = await caseNoteService.getAllNotes();
+    
+    if (!searchTerm.trim()) return allNotes;
+    
+    const search = searchTerm.toLowerCase();
+    return allNotes.filter(note => 
+      note.caseName?.toLowerCase().includes(search) || 
+      note.childName?.toLowerCase().includes(search) || 
+      note.clientName?.toLowerCase().includes(search) ||
+      note.serviceType?.toLowerCase().includes(search)
+    );
+  }, [searchTerm]);
+
+  // কনফার্ম রিমুভ
   const handleConfirmRemove = async () => {
     if (selectedNoteId !== null) {
-      await db.caseNotes.delete(selectedNoteId);
+      await caseNoteService.deleteNote(selectedNoteId);
       setModalType('none');
       setSelectedNoteId(null);
     }
+  };
+
+  // ডাটাবেজ সম্পূর্ণ ক্লিয়ার
+  const handleConfirmClearDatabase = async () => {
+    await caseNoteService.clearAllNotes();
+    setModalType('none');
   };
 
   if (notes === undefined) {
@@ -51,14 +164,15 @@ export const NoteList: React.FC = () => {
 
   // ফিল্টারিং লজিক
   const filteredNotes = notes.filter(note => {
-    if (!note.caseName || note.caseName.trim() === '' || note.caseName === 'N/A') return false;
-
     const caseName = note.caseName?.toLowerCase() || '';
     const childName = note.childName?.toLowerCase() || '';
+    const clientName = note.clientName?.toLowerCase() || '';
     const serviceType = note.serviceType?.toLowerCase() || '';
     const search = searchTerm.toLowerCase();
 
-    return caseName.includes(search) || childName.includes(search) || serviceType.includes(search);
+    if (!searchTerm.trim()) return true;
+
+    return caseName.includes(search) || childName.includes(search) || clientName.includes(search) || serviceType.includes(search);
   });
 
   const indexOfLastItem = currentPage * itemsPerPage;
@@ -81,13 +195,23 @@ export const NoteList: React.FC = () => {
           
           {/* All Data Push Button */}
           <button
-            onClick={() => setModalType('push_success')}
-            className="flex items-center gap-1.5 sm:gap-2 bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 text-white px-3 py-2 sm:px-3.5 rounded-xl text-xs font-semibold transition-all duration-200 active:scale-95 shadow-2xs cursor-pointer"
-            title="Push all local data to server"
-          >
-            <Zap size={14} />
-            <span>All Data Push</span>
-          </button>
+  onClick={handlePushAllData}  // 🔴 এটা পরিবর্তন করুন - আগে ছিল setModalType('push_success')
+  disabled={isSyncing}
+  className="flex items-center gap-1.5 sm:gap-2 bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 text-white px-3 py-2 sm:px-3.5 rounded-xl text-xs font-semibold transition-all duration-200 active:scale-95 shadow-2xs cursor-pointer disabled:opacity-50"
+  title="Push all local data to server"
+>
+  {isSyncing ? (
+    <>
+      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+      <span>Syncing {syncProgress.current}/{syncProgress.total}</span>
+    </>
+  ) : (
+    <>
+      <Zap size={14} />
+      <span>All Data Push</span>
+    </>
+  )}
+</button>
 
           {/* Clear DB Button */}
           <button
@@ -148,18 +272,23 @@ export const NoteList: React.FC = () => {
                 className="bg-white rounded-2xl border border-slate-200/70 shadow-xs hover:shadow-md transition-all duration-200 overflow-hidden"
               >
                 <div className="p-4 pb-3 border-b border-slate-100/80 flex justify-between items-center bg-slate-50/40">
-                  <span className="inline-flex items-center bg-blue-50 text-blue-700 font-bold text-[10px] uppercase tracking-wider px-2.5 py-1 rounded-lg border border-blue-100/60">
-                    {note.serviceType || 'N/A'}
+                  <span className="inline-flex items-center gap-1 bg-purple-50 text-purple-700 font-bold text-[10px] uppercase tracking-wider px-2.5 py-1 rounded-lg border border-purple-100/60">
+                    {note.clientType === '0' ? '👶 Child' : 
+                     note.clientType === '1' ? '👨‍👩 Parent' : 
+                     note.clientType === '2' ? '👤 Other' : 
+                     note.clientType === '3' ? '👥 Group' : 
+                     (SERVICE_TYPE_LABELS[note.serviceType] || note.serviceType || 'N/A')}
                   </span>
                   
                   <div className="flex items-center gap-1.5">
                     <button
-                      onClick={() => setModalType('offline')}
-                      className="p-2 bg-blue-50/70 text-blue-600 hover:bg-blue-100 border border-blue-100 rounded-xl active:scale-90 transition-all cursor-pointer"
-                      title="Push Data"
-                    >
-                      <CloudLightning size={13} />
-                    </button>
+  onClick={() => handlePushSingleNote(note)}  // এইটা পরিবর্তন করুন
+  className="p-2 bg-blue-50/70 text-blue-600 hover:bg-blue-100 border border-blue-100 rounded-xl active:scale-90 transition-all cursor-pointer"
+  title="Push Data"
+  disabled={isSyncing}
+>
+  {isSyncing ? <div className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" /> : <CloudLightning size={13} />}
+</button>
                     <button
                       onClick={() => note.id !== undefined && navigate(`/edit-note/${note.id}`)}
                       className="p-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-xl active:scale-90 transition-all cursor-pointer"
@@ -178,13 +307,23 @@ export const NoteList: React.FC = () => {
                 </div>
 
                 <div className="p-4 space-y-4">
+                  {/* Client Name */}
                   <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Case Name</span>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Client Name</span>
                     <h3 className="text-base font-extrabold text-slate-900 tracking-tight leading-snug mt-0.5">
-                      {note.caseName || 'N/A'}
+                      {note.clientName || note.childName || 'N/A'}
                     </h3>
                   </div>
 
+                  {/* Case Name */}
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Case Name</span>
+                    <p className="text-sm font-semibold text-slate-700 mt-0.5">
+                      {note.caseName || 'N/A'}
+                    </p>
+                  </div>
+
+                  {/* Date and Duration */}
                   <div className="grid grid-cols-2 gap-3">
                     <div className="flex items-center gap-2 bg-slate-50 border border-slate-100 p-2.5 rounded-xl">
                       <Calendar size={14} className="text-slate-400" />
@@ -202,16 +341,12 @@ export const NoteList: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-6 h-6 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center text-[11px] text-emerald-700 font-extrabold shadow-2xs">
-                        {note.childName ? note.childName.charAt(0).toUpperCase() : 'C'}
-                      </div>
-                      <div className="flex flex-col">
-                        <span className="text-[9px] font-bold text-slate-400 uppercase">Client</span>
-                        <span className="text-xs text-slate-800 font-extrabold">{note.childName || 'N/A'}</span>
-                      </div>
-                    </div>
+                  {/* Service Type */}
+                  <div className="pt-2 border-t border-slate-100">
+                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Service Type</span>
+                    <p className="text-xs font-medium text-slate-600 mt-0.5">
+                      {SERVICE_TYPE_LABELS[note.serviceType] || note.serviceType || 'N/A'}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -225,17 +360,18 @@ export const NoteList: React.FC = () => {
             <thead>
               <tr className="bg-slate-50/40 border-b border-slate-100 text-slate-500 font-bold tracking-wider uppercase text-[10px]">
                 <th className="p-4 pl-6">Date</th>
+                <th className="p-4">Client Type</th>
+                <th className="p-4">Client Name</th>
                 <th className="p-4">Service Type</th>
                 <th className="p-4">Duration</th>
                 <th className="p-4">Case Name</th>
-                <th className="p-4">Client Name</th>
                 <th className="p-4 text-center pr-6 w-56">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-600 font-medium">
               {currentItems.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-16 text-slate-400 font-medium">
+                  <td colSpan={7} className="text-center py-16 text-slate-400 font-medium">
                     <div className="flex flex-col items-center justify-center space-y-2">
                       <span className="text-xl">📁</span>
                       <p className="text-xs text-slate-400">No active welfare logs found matching search criteria.</p>
@@ -251,39 +387,56 @@ export const NoteList: React.FC = () => {
                         <span>{note.date || 'N/A'}</span>
                       </div>
                     </td>
+                    
+                    {/* Client Type Column */}
                     <td className="p-4">
-                      <span className="inline-flex items-center bg-slate-100/80 group-hover:bg-slate-200/50 text-slate-700 px-2.5 py-1 rounded-lg font-bold text-[10px] tracking-wide border border-slate-200/30 transition-colors">
-                        {note.serviceType || 'N/A'}
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] font-bold tracking-wide bg-purple-50 text-purple-700 border border-purple-100">
+                        {note.clientType === '0' ? '👶 Child' : 
+                         note.clientType === '1' ? '👨‍👩 Parent' : 
+                         note.clientType === '2' ? '👤 Other' : 
+                         note.clientType === '3' ? '👥 Group' : '—'}
                       </span>
                     </td>
+                    
+                    {/* Client Name Column */}
+                    <td className="p-4">
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-6 h-6 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center text-[10px] text-emerald-700 font-bold shrink-0">
+                          {(note.clientName || note.childName) ? ((note.clientName || note.childName).charAt(0).toUpperCase()) : 'C'}
+                        </div>
+                        <span className="text-slate-800 font-semibold">{note.clientName || note.childName || 'N/A'}</span>
+                      </div>
+                    </td>
+                    
+                    {/* Service Type Column - নাম দেখাবে */}
+                    <td className="p-4">
+                      <span className="inline-flex items-center bg-slate-100/80 group-hover:bg-slate-200/50 text-slate-700 px-2.5 py-1 rounded-lg font-bold text-[10px] tracking-wide border border-slate-200/30 transition-colors">
+                        {SERVICE_TYPE_LABELS[note.serviceType] || note.serviceType || 'N/A'}
+                      </span>
+                    </td>
+                    
                     <td className="p-4">
                       <div className="flex items-center gap-1.5 font-semibold text-slate-600 bg-slate-50 border border-slate-100 px-2 py-0.5 rounded-md w-max">
                         <Clock size={12} className="text-slate-400" />
                         <span>{note.durationMinutes ?? 0} Mins</span>
                       </div>
                     </td>
+                    
                     <td className="p-4 text-slate-900 font-bold tracking-tight text-sm">
                       {note.caseName || 'N/A'}
-                    </td>
-                    <td className="p-4">
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-6 h-6 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center text-[10px] text-emerald-700 font-bold shrink-0">
-                          {note.childName ? note.childName.charAt(0).toUpperCase() : 'C'}
-                        </div>
-                        <span className="text-slate-800 font-semibold">{note.childName || 'N/A'}</span>
-                      </div>
                     </td>
                     
                     {/* Action Column */}
                     <td className="p-4 text-center pr-6">
                       <div className="flex items-center justify-center gap-2">
-                        <button
-                          onClick={() => setModalType('offline')}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-blue-50/60 hover:bg-blue-50 border border-blue-200 text-blue-600 rounded-xl text-[11px] font-semibold shadow-2xs transition-all duration-150 active:scale-95 cursor-pointer"
-                        >
-                          <CloudLightning size={12} className="opacity-90" />
-                          <span>Push</span>
-                        </button>
+                      <button
+  onClick={() => handlePushSingleNote(note)}  // এইটা পরিবর্তন করুন
+  disabled={isSyncing}
+  className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-blue-50/60 hover:bg-blue-50 border border-blue-200 text-blue-600 rounded-xl text-[11px] font-semibold shadow-2xs transition-all duration-150 active:scale-95 cursor-pointer disabled:opacity-50"
+>
+  {isSyncing ? <div className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" /> : <CloudLightning size={12} className="opacity-90" />}
+  <span>Push</span>
+</button>
 
                         <button
                           onClick={() => note.id !== undefined && navigate(`/edit-note/${note.id}`)}
@@ -357,7 +510,7 @@ export const NoteList: React.FC = () => {
       
       {/* ১. অফলাইন মোডাল */}
       {modalType === 'offline' && (
-        <div className="fixed inset-0 bg-slate-900/40  flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl border border-slate-100 shadow-xl max-w-xs w-full p-5 space-y-4 text-center relative animate-in fade-in zoom-in-95 duration-150">
             <button onClick={() => setModalType('none')} className="absolute top-3 right-3 text-slate-400 hover:text-slate-600 p-1 rounded-lg transition-colors cursor-pointer"><X size={15} /></button>
             <div className="mx-auto w-11 h-11 bg-red-50 rounded-full flex items-center justify-center border border-red-100">
@@ -374,7 +527,7 @@ export const NoteList: React.FC = () => {
 
       {/* ২. একক নোট রিমুভ নিশ্চিতকরণ মোডাল */}
       {modalType === 'delete' && (
-        <div className="fixed inset-0 bg-slate-900/40  flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl border border-slate-100 shadow-xl max-w-xs w-full p-5 space-y-4 text-center relative animate-in fade-in zoom-in-95 duration-150">
             <div className="mx-auto w-11 h-11 bg-amber-50 rounded-full flex items-center justify-center border border-amber-100">
               <AlertTriangle size={20} className="text-amber-500" />
@@ -393,7 +546,7 @@ export const NoteList: React.FC = () => {
 
       {/* ৩. সম্পূর্ণ ডাটাবেজ ক্লিয়ার নিশ্চিতকরণ মোডাল */}
       {modalType === 'clear_db' && (
-        <div className="fixed inset-0 bg-slate-900/40  flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl border border-slate-100 shadow-xl max-w-xs w-full p-5 space-y-4 text-center relative animate-in fade-in zoom-in-95 duration-150">
             <div className="mx-auto w-11 h-11 bg-red-50 rounded-full flex items-center justify-center border border-red-100">
               <Trash2 size={20} className="text-red-500" />
@@ -412,7 +565,7 @@ export const NoteList: React.FC = () => {
 
       {/* ৪. অল পুশ ডাটা সাকসেস মোডাল */}
       {modalType === 'push_success' && (
-        <div className="fixed inset-0 bg-slate-900/40  flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl border border-slate-100 shadow-xl max-w-xs w-full p-5 space-y-4 text-center relative animate-in fade-in zoom-in-95 duration-150">
             <button onClick={() => setModalType('none')} className="absolute top-3 right-3 text-slate-400 hover:text-slate-600 p-1 rounded-lg transition-colors cursor-pointer"><X size={15} /></button>
             <div className="mx-auto w-11 h-11 bg-emerald-50 rounded-full flex items-center justify-center border border-emerald-100">

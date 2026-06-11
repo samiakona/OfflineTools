@@ -1,8 +1,20 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import { viteSingleFile } from 'vite-plugin-singlefile'; // ১. প্লাগইনটি ইম্পোর্ট করুন
+import { viteSingleFile } from 'vite-plugin-singlefile';
+
 // https://vite.dev/config/
 export default defineConfig({
- plugins: [react(), viteSingleFile()], // ২. প্লাগইনটি এখানে যুক্ত করুন
+  plugins: [react(), viteSingleFile()],
   base: './',
+  server: {
+    port: 5173,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:5096',
+        changeOrigin: true,
+        secure: false,
+        rewrite: (path) => path  // path same রাখবে
+      }
+    }
+  }
 })

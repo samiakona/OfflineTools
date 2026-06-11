@@ -37,6 +37,8 @@ Thumbs.db
 # index.html creat hbe
 
 #for apk file create
+#npm run build
+#npx cap sync android
 #cd android
 #.\gradlew assembleDebug
 #E:\Testing-components\HemaiyaOffline\android\app\build\outputs\apk\debug\
