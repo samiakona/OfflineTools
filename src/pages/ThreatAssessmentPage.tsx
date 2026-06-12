@@ -4,6 +4,7 @@ import {
   AlertTriangle, ShieldCheck, ShieldAlert, Calendar, Search, X,
   Zap, CloudLightning, WifiOff, CheckCircle2, Eye
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 // Dummy data interface
 interface ThreatAssessment {
@@ -30,7 +31,7 @@ const ThreatAssessmentPage: React.FC = () => {
   const [assessments, setAssessments] = useState<ThreatAssessment[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(true);
-
+const navigate = useNavigate();
   // Modal states
   const [modalType, setModalType] = useState<'offline' | 'delete' | 'clear_db' | 'push_success' | 'none'>('none');
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -174,7 +175,7 @@ const ThreatAssessmentPage: React.FC = () => {
 
           {/* New Assessment Button */}
           <button 
-            onClick={() => console.log('New threat assessment')}
+            onClick={() => navigate('/add-threat')}
             className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-md shadow-blue-600/10 transition-all active:scale-95 cursor-pointer"
           >
             <Plus size={16} /> 

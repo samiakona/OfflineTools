@@ -74,17 +74,21 @@ const handlePushAllData = async () => {
 };
 
 // Push Single data
-// Push Single data - caseName কে caseNumber হিসেবে ব্যবহার করুন
-// Push Single data
+// NoteList.tsx-এর অংশ - Push Single Note ফাংশন আপডেট
 const handlePushSingleNote = async (note: any) => {
-  // 🔴 নোট ভ্যালিড কিনা চেক করুন
   if (!note) {
     console.error('Note is undefined');
     alert('Invalid note data');
     return;
   }
   
-  console.log('Pushing note:', note);
+  console.log('📤 Pushing note to server:', {
+    id: note.id,
+    caseName: note.caseName,
+    clientName: note.clientName,
+    serviceType: note.serviceType,
+    date: note.date
+  });
   
   const apiOnline = await checkAPI();
   
@@ -95,17 +99,19 @@ const handlePushSingleNote = async (note: any) => {
   
   const caseNumber = note.caseName || note.caseNumber || 'DEFAULT-CASE';
   
-  console.log('Case Number:', caseNumber);
+  console.log('🔑 Case Number for sync:', caseNumber);
+  console.log('📦 Full note data being sent:', note);
   
   const result = await syncNote(caseNumber, note);
   
   if (result.success) {
-    alert(`Note synced successfully! Case: ${caseNumber}, Server ID: ${result.syncedId}`);
+    console.log('✅ Sync successful!', result);
+    alert(`✅ Note synced successfully!\n\nCase: ${caseNumber}\nServer ID: ${result.syncedId}\nMessage: ${result.message}`);
   } else {
-    alert(`Sync failed: ${result.message}`);
+    console.error('❌ Sync failed:', result);
+    alert(`❌ Sync failed!\n\nCase: ${caseNumber}\nError: ${result.message}\n\nPlease check console for details.`);
   }
 };
-
 
 
 

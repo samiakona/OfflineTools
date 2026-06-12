@@ -7,7 +7,7 @@ import { NoteList } from './pages/NoteList';
 import { NoteFormPage } from './pages/NoteFormPage'; // ← এই লাইনটি ঠিক আছে
 import { AssessmentsPage } from './pages/AssessmentsPage';
 import ThreatAssessmentPage from './pages/ThreatAssessmentPage';
-import { ThreatAssessmentFormPage } from './pages/ThreatAssessmentFormPage';
+import {ThreatAssessmentFormPage}   from './pages/ThreatAssessmentFormPage';
 import { AssessmentFormPage } from './pages/AssessmentFormPage';
 
 const App: React.FC = () => {
@@ -22,6 +22,7 @@ const App: React.FC = () => {
           <Route path="/new-assessment" element={<AssessmentFormPage />} />
           <Route path="/edit-assessment/:id" element={<AssessmentFormPage />} />
           <Route path="/threat-assessment" element={<ThreatAssessmentPage />} />
+          <Route path="/add-threat" element={<ThreatAssessmentFormPage />} />
           <Route path="/threat-assessment/:id" element={<ThreatAssessmentFormPage />} />
         </Routes>
       </DashboardLayout>

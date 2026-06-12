@@ -3,14 +3,13 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { 
   ArrowLeft, User, Calendar, Bell, ShieldCheck, 
   Check, Layers, Clock, MapPin, Briefcase, 
-  ListPlus, Users,  Phone, UserCheck 
+  ListPlus, Users, Phone, UserCheck 
 } from 'lucide-react';
-import type {  CaseNoteFormData } from '../types/caseNote';
-
+import type { CaseNoteFormData } from '../types/caseNote';
 import { CustomSelect } from '../components/Common/CustomSelect';
 import { caseNoteService } from '../services/caseNoteService';
 
-// এনাম এবং লুকআপ ডাটা
+// Enums and Lookup Data
 const CLIENT_TYPES = [
   { value: '0', label: 'Child' },
   { value: '1', label: 'Parent' },
@@ -91,6 +90,7 @@ const TEAM_MEMBERS = [
   { value: 'Jahanara_Suchi, Supervisor (Supervisor)', label: 'Jahanara_Suchi, Supervisor (Supervisor)' },
   { value: 'Rahat_Keramat, Case Worker', label: 'Rahat_Keramat, Case Worker' },
   { value: 'Tasnim_Alam, Field Officer', label: 'Tasnim_Alam, Field Officer' },
+  { value: 'Kona_Supervisor', label: 'Kona_Supervisor' },
   { value: 'Masum_Sup, Supervisor', label: 'Masum_Sup, Supervisor' }
 ];
 
@@ -107,8 +107,6 @@ const TIME_OPTIONS = (() => {
   }
   return times;
 })();
-
-
 
 // Sample data
 const getChildrenList = () => [
@@ -129,26 +127,26 @@ export const NoteFormPage: React.FC = () => {
   const { id } = useParams<{ id: string }>(); 
   const isEditMode = Boolean(id);
 
-  // ফর্মের ইনিশিয়াল স্টেট
+  // Form initial state
   const [formData, setFormData] = useState<CaseNoteFormData>({
     date: new Date().toISOString().split('T')[0],
-    time: '12:00 AM',
-    childName: 'seko jk',
-    appointmentStatus: 'Scheduled',
+    time: '09:30 AM',
+    childName: '',
+    appointmentStatus: 'Completed',
     nextAppointmentDate: '',
     nextAppointmentTime: '',
-    contactType: '',
-    location: '',
-    serviceType: '',
+    contactType: '2', // Face to Face
+    location: '4', // School
+    serviceType: '7', // Child Contact
     additionalServices: [],
-    durationMinutes: 15,
-    caseName: '', // 🔴 Case Name ফিল্ড - এটা খালি রাখুন, ইউজার পূরণ করবে
+    durationMinutes: 60,
+    caseName: '',
     narrative: '',
-    teamMember: 'Jahanara_Suchi, Supervisor (Supervisor)',
+    teamMember: 'Kona_Supervisor',
     otherAttendees: '',
-    notifyTeam: false,
+    notifyTeam: true,
     isCompleted: false,
-    clientType: '0',
+    clientType: '2', // Other
     clientId: '',
     clientName: '',
   });
@@ -157,7 +155,6 @@ export const NoteFormPage: React.FC = () => {
   const [parentsList] = useState(getParentsList());
   const [auditData, setAuditData] = useState<{ createdBy: string; createdAt: number; updatedBy: string; updatedAt: number } | null>(null);
 
-  // বিদ্যমান টাইম ড্রপডাউনের অপশন জেনারেটর
   const timeOptions = (() => {
     const times = [];
     const periods = ['AM', 'PM'];
@@ -210,9 +207,15 @@ export const NoteFormPage: React.FC = () => {
           const { id: _, createdAt, createdBy, updatedAt, updatedBy, ...rest } = note;
           setFormData({
             ...rest,
-            clientType: rest.clientType || '0',
+            clientType: rest.clientType || '2',
             clientId: rest.clientId || '',
             clientName: rest.clientName || '',
+            contactType: rest.contactType || '2',
+            location: rest.location || '4',
+            serviceType: rest.serviceType || '7',
+            appointmentStatus: rest.appointmentStatus || 'Completed',
+            notifyTeam: rest.notifyTeam !== undefined ? rest.notifyTeam : true,
+            durationMinutes: rest.durationMinutes || 60,
           });
           setAuditData({ createdBy, createdAt, updatedBy, updatedAt });
         }
@@ -222,7 +225,7 @@ export const NoteFormPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const currentOperator = 'Masum_Sup';
+    const currentOperator = formData.teamMember || 'Kona_Supervisor';
 
     const noteToSave = {
       date: formData.date,
@@ -236,7 +239,7 @@ export const NoteFormPage: React.FC = () => {
       serviceType: formData.serviceType,
       additionalServices: formData.additionalServices,
       durationMinutes: formData.durationMinutes,
-      caseName: formData.caseName, //
+      caseName: formData.caseName,
       narrative: formData.narrative,
       teamMember: formData.teamMember,
       otherAttendees: formData.otherAttendees,
@@ -247,20 +250,21 @@ export const NoteFormPage: React.FC = () => {
       clientName: formData.clientName,
     };
 
-    console.log('Saving note with Case Name:', noteToSave.caseName);
+    console.log('💾 Saving note with Case Name:', noteToSave.caseName);
+    console.log('📝 Full note data:', noteToSave);
 
     try {
       if (isEditMode && id) {
         await caseNoteService.updateNote(Number(id), noteToSave, currentOperator);
-        alert('Case note updated successfully!');
+        alert('✅ Case note updated successfully!');
       } else {
         await caseNoteService.createNote(noteToSave, currentOperator);
-        alert('Case note created successfully!');
+        alert('✅ Case note created successfully!');
       }
       navigate('/');
     } catch (error) {
-      console.error("Failed to save case note:", error);
-      alert("An error occurred while saving the document.");
+      console.error("❌ Failed to save case note:", error);
+      alert("❌ An error occurred while saving the document.");
     }
   };
 
@@ -352,7 +356,7 @@ export const NoteFormPage: React.FC = () => {
                 <Users size={12} /> Client Type *
               </label>
               <CustomSelect 
-                value={formData.clientType || '0'}
+                value={formData.clientType || '2'}
                 options={CLIENT_TYPES}
                 onChange={handleClientTypeChange}
                 disabled={isReadOnly}
@@ -384,7 +388,7 @@ export const NoteFormPage: React.FC = () => {
             </div>
           </div>
 
-          {/* 🔴 Case Name Input Field - স্পষ্টভাবে যোগ করা হচ্ছে */}
+          {/* Case Name Input Field */}
           <div className="mt-5 pt-4 border-t border-slate-100">
             <label className="block text-[11px] font-bold text-slate-600 tracking-wide mb-1.5 flex items-center gap-1">
               <Briefcase size={12} /> Case Name / Identifier *
@@ -395,7 +399,7 @@ export const NoteFormPage: React.FC = () => {
               onChange={(e) => updateField('caseName', e.target.value)} 
               disabled={isReadOnly} 
               required 
-              placeholder="e.g., Intake_4350, CASE-2024-001, Smith Family Case"
+              placeholder="e.g., 2026-04-R0009, Intake_4350, CASE-2024-001"
               className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 font-medium transition shadow-2xs" 
             />
             <p className="text-[10px] text-slate-400 mt-1">Unique identifier for this case (will appear in the case notes list)</p>
@@ -600,7 +604,7 @@ export const NoteFormPage: React.FC = () => {
             </div>
             <div className="flex flex-col">
               <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                <ShieldCheck size={13} className="text-slate-400" /> Mark as completed. (And lock this Note as Read Only)
+                <ShieldCheck size={13} className="text-slate-400" /> Mark as completed (And lock this Note as Read Only)
               </span>
               <span className="text-[10px] font-medium text-slate-400/90 mt-0.5">Freezes this record asset. Safe lock mechanism prevents further mutations.</span>
             </div>

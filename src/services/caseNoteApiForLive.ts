@@ -1,4 +1,4 @@
-// API Base URL
+// services/caseNoteApiForLive.ts
 const API_BASE_URL = 'http://localhost:5096/api/casenote';
 
 export interface SyncResponse {
@@ -8,14 +8,115 @@ export interface SyncResponse {
   caseNumber?: string;
 }
 
-// API চেক করার ফাংশন
+// Direct mapping functions (frontend value to backend lookup ID)
+const getEventStatusLookupId = (status: string): number => {
+  const mapping: Record<string, number> = {
+    'Scheduled': 1,
+    'Completed': 2,
+    'Cancelled': 3,
+    'Rescheduled': 4,
+    'No Show': 5,
+  };
+  return mapping[status] || 2; // Default: Completed
+};
+
+const getCaseNoteContactTypeLookupId = (contactType: string): number => {
+  const mapping: Record<string, number> = {
+    '1': 1,  // Phone
+    '2': 2,  // Face to Face
+    '3': 3,  // Email
+    '4': 4,  // Text
+    '5': 5,  // N/A
+    '6': 6,  // Letter
+    '7': 7,  // Virtual
+    '8': 8,  // Note to File
+    '9': 9,  // Staffing
+  };
+  return mapping[contactType] || 2; // Default: Face to Face
+};
+
+const getLocationLookupId = (location: string): number => {
+  const mapping: Record<string, number> = {
+    '1': 1,   // Home
+    '2': 2,   // Office
+    '3': 3,   // Relatives Home
+    '4': 4,   // School
+    '5': 5,   // Community Home
+    '6': 6,   // Foster Care
+    '7': 7,   // Therapeutic Foster Care
+    '8': 8,   // Work
+    '9': 9,   // Not Applicable
+    '10': 10, // Jail/Prison
+    '11': 11, // Hospital
+    '12': 12, // Court
+    '13': 13, // Placement Location
+    '14': 14, // WIC
+    '15': 15, // Child Support
+    '16': 16, // Enrollment
+    '17': 17, // Food Stamps
+    '18': 18, // Community Visit
+    '19': 19, // Other
+  };
+  return mapping[location] || 4; // Default: School
+};
+
+const getCaseEventLookupId = (serviceType: string): number => {
+  const mapping: Record<string, number> = {
+    '1': 1,   // Child and Family Team
+    '2': 2,   // Residential Placement
+    '3': 3,   // Treatment Contract
+    '4': 4,   // N/A
+    '5': 5,   // Placement Contact
+    '6': 6,   // Parent Contact
+    '7': 7,   // Child Contact
+    '8': 8,   // Support Meeting
+    '9': 9,   // Court
+    '10': 10, // Transportation
+    '11': 11, // Supervised Visit
+    '12': 12, // Medical
+    '13': 13, // BH Contact (For Therapy)
+    '14': 14, // School Contact
+    '15': 15, // PIP
+    '16': 16, // Obtaining Community Resources
+    '17': 17, // General Case Management
+    '18': 18, // Staffing with Supervisor
+    '19': 19, // Staffing with Group
+    '20': 20, // Legal
+    '21': 21, // Closing Summary
+    '22': 22, // PAP
+    '23': 23, // Wizards and Fairies
+    '24': 24, // Update Case Plan
+  };
+  return mapping[serviceType] || 7; // Default: Child Contact
+};
+
+// Helper function to format time to ISO string
+const formatTimeToISO = (dateStr: string, timeStr: string): string => {
+  if (!dateStr || !timeStr) return new Date().toISOString();
+  
+  const parsedDate = new Date(dateStr);
+  const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
+  
+  if (match) {
+    let hour = parseInt(match[1]);
+    const minute = parseInt(match[2]);
+    const period = match[3].toUpperCase();
+    
+    if (period === 'PM' && hour !== 12) hour += 12;
+    if (period === 'AM' && hour === 12) hour = 0;
+    
+    parsedDate.setHours(hour, minute, 0, 0);
+  }
+  
+  return parsedDate.toISOString();
+};
+
+// API Health Check
 export const checkAPIHealth = async (): Promise<boolean> => {
   try {
     const response = await fetch(`${API_BASE_URL}/test`, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
     });
     const result = await response.json();
     console.log('API Health Check:', result);
@@ -26,80 +127,82 @@ export const checkAPIHealth = async (): Promise<boolean> => {
   }
 };
 
-// একক নোট সিঙ্ক করার ফাংশন - নিরাপদভাবে প্রপার্টি অ্যাক্সেস
-// একক নোট সিঙ্ক করার ফাংশন
+// Main sync function
 export const syncSingleNote = async (caseNumber: string, noteData: any): Promise<SyncResponse> => {
   try {
     const safeNoteData = noteData || {};
-    
     const encodedCaseNumber = encodeURIComponent(caseNumber || 'DEFAULT-CASE');
     const url = `${API_BASE_URL}/sync?caseNumber=${encodedCaseNumber}`;
     
-    console.log('Sending to URL:', url);
-    console.log('Case Number:', caseNumber);
-    console.log('Note Data:', safeNoteData);
+    console.log('🔄 Syncing note for case:', caseNumber);
+    console.log('📦 Original note data:', safeNoteData);
 
-    // 🔴 সবসময় id = 0 পাঠান (সবসময় নতুন নোট তৈরি করতে)
-    // লোকাল ID সার্ভারে পাঠানোর দরকার নেই
-    const id = 0;  // 🔴 এটা পরিবর্তন করুন - সবসময় 0 পাঠান
+    // Prepare dates and times
+    const eventDate = safeNoteData.date ? new Date(safeNoteData.date).toISOString() : new Date().toISOString();
+    const eventTime = safeNoteData.date && safeNoteData.time 
+      ? formatTimeToISO(safeNoteData.date, safeNoteData.time)
+      : new Date().toISOString();
     
-    const teamMember = safeNoteData.teamMember || safeNoteData.recordedBy || 'System';
-    const recordedBy = teamMember;
-    const createdBy = safeNoteData.createdBy || 'System';
-    const clientType = parseInt(safeNoteData.clientType) || 0;
-    const duration = safeNoteData.durationMinutes || 30;
-    const notes = safeNoteData.narrative || '';
-    const notifyAll = safeNoteData.notifyTeam || false;
-    const isCompleted = safeNoteData.isCompleted || false;
+    // Next appointment (if any)
+    let nextAppointmentDate = null;
+    let nextAppointmentTime = null;
     
-    let eventDate = new Date().toISOString();
-    let eventTime = new Date().toISOString();
-    
-    if (safeNoteData.date) {
-      eventDate = new Date(safeNoteData.date).toISOString();
-    }
-    
-    if (safeNoteData.date && safeNoteData.time) {
-      eventTime = new Date(`${safeNoteData.date} ${safeNoteData.time}`).toISOString();
+    if (safeNoteData.nextAppointmentDate) {
+      nextAppointmentDate = new Date(safeNoteData.nextAppointmentDate).toISOString();
+      
+      if (safeNoteData.nextAppointmentTime) {
+        nextAppointmentTime = formatTimeToISO(
+          safeNoteData.nextAppointmentDate, 
+          safeNoteData.nextAppointmentTime
+        );
+      }
     }
 
+    // Build payload exactly matching backend structure
     const payload = {
-      id: id,  // 🔴 সবসময় 0
-      recordedBy: recordedBy,
+      id: 0,
+      recordedBy: safeNoteData.teamMember || 'Kona_Supervisor',
       recordedOn: new Date().toISOString(),
-      createdBy: createdBy,
+      createdBy: safeNoteData.teamMember || 'Kona_Supervisor',
       createdOn: new Date().toISOString(),
-      clientType: clientType,
+      clientType: parseInt(safeNoteData.clientType) || 2,
       eventDate: eventDate,
       eventTime: eventTime,
-      duration: duration,
-      notes: notes,
-      notifyAll: notifyAll,
-      isCompleted: isCompleted,
+      duration: safeNoteData.durationMinutes || 60,
+      eventStatusLookupId: getEventStatusLookupId(safeNoteData.appointmentStatus || 'Completed'),
+      nextAppointmentDate: nextAppointmentDate,
+      nextAppointmentTime: nextAppointmentTime,
+      caseNoteContactTypeLookupId: getCaseNoteContactTypeLookupId(safeNoteData.contactType || '2'),
+      locationLookupId: getLocationLookupId(safeNoteData.location || '4'),
+      caseEventLookupId: getCaseEventLookupId(safeNoteData.serviceType || '7'),
+      selectedAdditionalServiceList: safeNoteData.additionalServices || [],
+      notes: safeNoteData.narrative || safeNoteData.notes || '',
+      recipients: safeNoteData.otherAttendees || safeNoteData.teamMember || 'Kona_Supervisor',
+      notifyAll: safeNoteData.notifyTeam === true
     };
 
-    console.log('Final Payload:', payload);
+    console.log('📤 Final Backend Payload:', JSON.stringify(payload, null, 2));
 
     const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
 
-    console.log('Response status:', response.status);
+    console.log('📡 Response Status:', response.status);
 
     if (!response.ok) {
       const errorText = await response.text();
+      console.error('❌ Error response:', errorText);
       throw new Error(`HTTP ${response.status}: ${errorText}`);
     }
 
     const result = await response.json();
-    console.log('Response data:', result);
+    console.log('✅ Sync Response:', result);
     return result;
+    
   } catch (error: any) {
-    console.error('Sync error:', error);
+    console.error('❌ Sync error:', error);
     return {
       success: false,
       message: error.message || 'Network error',
