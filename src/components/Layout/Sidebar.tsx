@@ -54,7 +54,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
           <ClipboardList size={16} strokeWidth={2.5} />
           <span>Threat Assessments</span>
         </NavLink>
-        <NavLink to="/fch" onClick={onClose} className={navLinkClass}>
+        <NavLink to="/home-study-assessment" onClick={onClose} className={navLinkClass}>
           <ClipboardList size={16} strokeWidth={2.5} />
           <span>FC - Home Study</span>
         </NavLink>
