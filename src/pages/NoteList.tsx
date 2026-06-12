@@ -40,88 +40,98 @@ export const NoteList: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
+  // Individual loading states for each button
+  const [syncingNoteId, setSyncingNoteId] = useState<number | null>(null);
+  const [syncingAll, setSyncingAll] = useState(false);
 
-
-// for live data syncing
-const { isSyncing, syncProgress,syncNote, syncAllLocalNotes, checkAPI } = useCaseNoteSync();
-
-// Push All data
-// Push All data - প্রতিটি নোটের নিজস্ব caseName ব্যবহার করবে
-const handlePushAllData = async () => {
-  const apiOnline = await checkAPI();
-  
-  if (!apiOnline) {
-    setModalType('offline');
-    return;
-  }
-  
-  const allNotes = await caseNoteService.getAllNotes();
-  
-  if (allNotes.length === 0) {
-    alert('No notes to sync');
-    return;
-  }
-  
-  console.log('Total notes to sync:', allNotes.length);
-  
-  const result = await syncAllLocalNotes(allNotes);
-  
-  if (result.success) {
-    setModalType('push_success');
-  } else {
-    alert(`Sync completed with issues: ${result.message}`);
-  }
-};
-
-// Push Single data
-// NoteList.tsx-এর অংশ - Push Single Note ফাংশন আপডেট
-const handlePushSingleNote = async (note: any) => {
-  if (!note) {
-    console.error('Note is undefined');
-    alert('Invalid note data');
-    return;
-  }
-  
-  console.log('📤 Pushing note to server:', {
-    id: note.id,
-    caseName: note.caseName,
-    clientName: note.clientName,
-    serviceType: note.serviceType,
-    date: note.date
-  });
-  
-  const apiOnline = await checkAPI();
-  
-  if (!apiOnline) {
-    setModalType('offline');
-    return;
-  }
-  
-  const caseNumber = note.caseName || note.caseNumber || 'DEFAULT-CASE';
-  
-  console.log('🔑 Case Number for sync:', caseNumber);
-  console.log('📦 Full note data being sent:', note);
-  
-  const result = await syncNote(caseNumber, note);
-  
-  if (result.success) {
-    console.log('✅ Sync successful!', result);
-    alert(`✅ Note synced successfully!\n\nCase: ${caseNumber}\nServer ID: ${result.syncedId}\nMessage: ${result.message}`);
-  } else {
-    console.error('❌ Sync failed:', result);
-    alert(`❌ Sync failed!\n\nCase: ${caseNumber}\nError: ${result.message}\n\nPlease check console for details.`);
-  }
-};
-
-
-
-
-
-  // মোডাল স্টেটসমূহ
+  // Modal states
   const [modalType, setModalType] = useState<'offline' | 'delete' | 'clear_db' | 'push_success' | 'none'>('none');
   const [selectedNoteId, setSelectedNoteId] = useState<number | null>(null);
 
-  // সিঙ্গেল রিমুভ বাটনে ক্লিক করলে মোডাল দেখাবে
+  const { isSyncing, syncProgress, syncNote, syncAllLocalNotes, checkAPI } = useCaseNoteSync();
+
+  // Single note push handler with individual loading
+  const handlePushSingleNote = async (note: any, event: React.MouseEvent) => {
+    event.stopPropagation();
+    
+    if (!note || !note.id) {
+      console.error('Note is undefined or missing id');
+      alert('Invalid note data');
+      return;
+    }
+    
+    console.log('📤 Pushing single note to server:', {
+      id: note.id,
+      caseName: note.caseName,
+      clientName: note.clientName
+    });
+    
+    const apiOnline = await checkAPI();
+    
+    if (!apiOnline) {
+      setModalType('offline');
+      return;
+    }
+    
+    // Set loading state for this specific note only
+    setSyncingNoteId(note.id);
+    
+    try {
+      const caseNumber = note.caseName || note.caseNumber || 'DEFAULT-CASE';
+      const result = await syncNote(caseNumber, note);
+      
+      if (result.success) {
+        console.log('✅ Single note sync successful!', result);
+        alert(`✅ Note synced successfully!\n\nCase: ${caseNumber}\nServer ID: ${result.syncedId}`);
+      } else {
+        console.error('❌ Sync failed:', result);
+        alert(`❌ Sync failed!\n\nError: ${result.message}`);
+      }
+    } catch (error) {
+      console.error('Error syncing note:', error);
+      alert('An error occurred while syncing. Please try again.');
+    } finally {
+      setSyncingNoteId(null);
+    }
+  };
+
+  // Push all data handler with separate loading state
+  const handlePushAllData = async () => {
+    const apiOnline = await checkAPI();
+    
+    if (!apiOnline) {
+      setModalType('offline');
+      return;
+    }
+    
+    const allNotes = await caseNoteService.getAllNotes();
+    
+    if (allNotes.length === 0) {
+      alert('No notes to sync');
+      return;
+    }
+    
+    console.log('Total notes to sync:', allNotes.length);
+    
+    setSyncingAll(true);
+    
+    try {
+      const result = await syncAllLocalNotes(allNotes);
+      
+      if (result.success) {
+        setModalType('push_success');
+      } else {
+        alert(`Sync completed with issues: ${result.message}`);
+      }
+    } catch (error) {
+      console.error('Error syncing all notes:', error);
+      alert('Failed to sync all notes. Please try again.');
+    } finally {
+      setSyncingAll(false);
+    }
+  };
+
+  // Trigger remove note modal
   const triggerRemoveNote = (id: number | undefined) => {
     if (id !== undefined) {
       setSelectedNoteId(id);
@@ -129,7 +139,22 @@ const handlePushSingleNote = async (note: any) => {
     }
   };
 
-  // ডাটাবেজ থেকে রিয়েল-টাইম লাইভ কুয়েরি
+  // Confirm remove single note
+  const handleConfirmRemove = async () => {
+    if (selectedNoteId !== null) {
+      await caseNoteService.deleteNote(selectedNoteId);
+      setModalType('none');
+      setSelectedNoteId(null);
+    }
+  };
+
+  // Clear entire database
+  const handleConfirmClearDatabase = async () => {
+    await caseNoteService.clearAllNotes();
+    setModalType('none');
+  };
+
+  // Live query for notes
   const notes = useLiveQuery(async () => {
     const allNotes = await caseNoteService.getAllNotes();
     
@@ -144,21 +169,6 @@ const handlePushSingleNote = async (note: any) => {
     );
   }, [searchTerm]);
 
-  // কনফার্ম রিমুভ
-  const handleConfirmRemove = async () => {
-    if (selectedNoteId !== null) {
-      await caseNoteService.deleteNote(selectedNoteId);
-      setModalType('none');
-      setSelectedNoteId(null);
-    }
-  };
-
-  // ডাটাবেজ সম্পূর্ণ ক্লিয়ার
-  const handleConfirmClearDatabase = async () => {
-    await caseNoteService.clearAllNotes();
-    setModalType('none');
-  };
-
   if (notes === undefined) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-slate-500 font-medium space-y-3">
@@ -168,7 +178,6 @@ const handlePushSingleNote = async (note: any) => {
     );
   }
 
-  // ফিল্টারিং লজিক
   const filteredNotes = notes.filter(note => {
     const caseName = note.caseName?.toLowerCase() || '';
     const childName = note.childName?.toLowerCase() || '';
@@ -199,25 +208,25 @@ const handlePushSingleNote = async (note: any) => {
         {/* Buttons */}
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
           
-          {/* All Data Push Button */}
+          {/* All Data Push Button - with separate loading state */}
           <button
-  onClick={handlePushAllData}  // 🔴 এটা পরিবর্তন করুন - আগে ছিল setModalType('push_success')
-  disabled={isSyncing}
-  className="flex items-center gap-1.5 sm:gap-2 bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 text-white px-3 py-2 sm:px-3.5 rounded-xl text-xs font-semibold transition-all duration-200 active:scale-95 shadow-2xs cursor-pointer disabled:opacity-50"
-  title="Push all local data to server"
->
-  {isSyncing ? (
-    <>
-      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-      <span>Syncing {syncProgress.current}/{syncProgress.total}</span>
-    </>
-  ) : (
-    <>
-      <Zap size={14} />
-      <span>All Data Push</span>
-    </>
-  )}
-</button>
+            onClick={handlePushAllData}
+            disabled={syncingAll || syncingNoteId !== null}
+            className="flex items-center gap-1.5 sm:gap-2 bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 text-white px-3 py-2 sm:px-3.5 rounded-xl text-xs font-semibold transition-all duration-200 active:scale-95 shadow-2xs cursor-pointer disabled:opacity-50"
+            title="Push all local data to server"
+          >
+            {syncingAll ? (
+              <>
+                <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <span>Syncing {syncProgress.current}/{syncProgress.total}</span>
+              </>
+            ) : (
+              <>
+                <Zap size={14} />
+                <span>All Data Push</span>
+              </>
+            )}
+          </button>
 
           {/* Clear DB Button */}
           <button
@@ -265,7 +274,7 @@ const handlePushSingleNote = async (note: any) => {
           </div>
         </div>
 
-        {/* 📱 ১. মোবাইল কার্ড লেআউট */}
+        {/* Mobile Card Layout */}
         <div className="block lg:hidden bg-slate-100/50 p-3 space-y-3.5">
           {currentItems.length === 0 ? (
             <div className="text-center py-12 text-slate-400 font-medium bg-white rounded-xl border border-slate-200/60">
@@ -287,14 +296,19 @@ const handlePushSingleNote = async (note: any) => {
                   </span>
                   
                   <div className="flex items-center gap-1.5">
+                    {/* Push Button - Mobile with individual loading */}
                     <button
-  onClick={() => handlePushSingleNote(note)}  // এইটা পরিবর্তন করুন
-  className="p-2 bg-blue-50/70 text-blue-600 hover:bg-blue-100 border border-blue-100 rounded-xl active:scale-90 transition-all cursor-pointer"
-  title="Push Data"
-  disabled={isSyncing}
->
-  {isSyncing ? <div className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" /> : <CloudLightning size={13} />}
-</button>
+                      onClick={(e) => handlePushSingleNote(note, e)}
+                      className="p-2 bg-blue-50/70 text-blue-600 hover:bg-blue-100 border border-blue-100 rounded-xl active:scale-90 transition-all cursor-pointer disabled:opacity-50"
+                      title="Push Data"
+                      disabled={syncingNoteId === note.id || syncingAll}
+                    >
+                      {syncingNoteId === note.id ? (
+                        <div className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <CloudLightning size={13} />
+                      )}
+                    </button>
                     <button
                       onClick={() => note.id !== undefined && navigate(`/edit-note/${note.id}`)}
                       className="p-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-xl active:scale-90 transition-all cursor-pointer"
@@ -313,7 +327,6 @@ const handlePushSingleNote = async (note: any) => {
                 </div>
 
                 <div className="p-4 space-y-4">
-                  {/* Client Name */}
                   <div>
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Client Name</span>
                     <h3 className="text-base font-extrabold text-slate-900 tracking-tight leading-snug mt-0.5">
@@ -321,7 +334,6 @@ const handlePushSingleNote = async (note: any) => {
                     </h3>
                   </div>
 
-                  {/* Case Name */}
                   <div>
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Case Name</span>
                     <p className="text-sm font-semibold text-slate-700 mt-0.5">
@@ -329,7 +341,6 @@ const handlePushSingleNote = async (note: any) => {
                     </p>
                   </div>
 
-                  {/* Date and Duration */}
                   <div className="grid grid-cols-2 gap-3">
                     <div className="flex items-center gap-2 bg-slate-50 border border-slate-100 p-2.5 rounded-xl">
                       <Calendar size={14} className="text-slate-400" />
@@ -347,7 +358,6 @@ const handlePushSingleNote = async (note: any) => {
                     </div>
                   </div>
 
-                  {/* Service Type */}
                   <div className="pt-2 border-t border-slate-100">
                     <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Service Type</span>
                     <p className="text-xs font-medium text-slate-600 mt-0.5">
@@ -360,7 +370,7 @@ const handlePushSingleNote = async (note: any) => {
           )}
         </div>
 
-        {/* 💻 ২. ডেক্সটপ টেবিল লেআউট */}
+        {/* Desktop Table Layout */}
         <div className="hidden lg:block overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
@@ -382,8 +392,8 @@ const handlePushSingleNote = async (note: any) => {
                       <span className="text-xl">📁</span>
                       <p className="text-xs text-slate-400">No active welfare logs found matching search criteria.</p>
                     </div>
-                  </td>
-                </tr>
+                   </td>
+                 </tr>
               ) : (
                 currentItems.map((note) => (
                   <tr key={note.id} className="hover:bg-slate-50/40 transition-colors duration-150 group">
@@ -394,7 +404,6 @@ const handlePushSingleNote = async (note: any) => {
                       </div>
                     </td>
                     
-                    {/* Client Type Column */}
                     <td className="p-4">
                       <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] font-bold tracking-wide bg-purple-50 text-purple-700 border border-purple-100">
                         {note.clientType === '0' ? '👶 Child' : 
@@ -404,7 +413,6 @@ const handlePushSingleNote = async (note: any) => {
                       </span>
                     </td>
                     
-                    {/* Client Name Column */}
                     <td className="p-4">
                       <div className="flex items-center gap-1.5">
                         <div className="w-6 h-6 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center text-[10px] text-emerald-700 font-bold shrink-0">
@@ -414,7 +422,6 @@ const handlePushSingleNote = async (note: any) => {
                       </div>
                     </td>
                     
-                    {/* Service Type Column - নাম দেখাবে */}
                     <td className="p-4">
                       <span className="inline-flex items-center bg-slate-100/80 group-hover:bg-slate-200/50 text-slate-700 px-2.5 py-1 rounded-lg font-bold text-[10px] tracking-wide border border-slate-200/30 transition-colors">
                         {SERVICE_TYPE_LABELS[note.serviceType] || note.serviceType || 'N/A'}
@@ -432,17 +439,22 @@ const handlePushSingleNote = async (note: any) => {
                       {note.caseName || 'N/A'}
                     </td>
                     
-                    {/* Action Column */}
+                    {/* Action Column with individual loading states */}
                     <td className="p-4 text-center pr-6">
                       <div className="flex items-center justify-center gap-2">
-                      <button
-  onClick={() => handlePushSingleNote(note)}  // এইটা পরিবর্তন করুন
-  disabled={isSyncing}
-  className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-blue-50/60 hover:bg-blue-50 border border-blue-200 text-blue-600 rounded-xl text-[11px] font-semibold shadow-2xs transition-all duration-150 active:scale-95 cursor-pointer disabled:opacity-50"
->
-  {isSyncing ? <div className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" /> : <CloudLightning size={12} className="opacity-90" />}
-  <span>Push</span>
-</button>
+                        {/* Push Button - Desktop with individual loading */}
+                        <button
+                          onClick={(e) => handlePushSingleNote(note, e)}
+                          disabled={syncingNoteId === note.id || syncingAll}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-blue-50/60 hover:bg-blue-50 border border-blue-200 text-blue-600 rounded-xl text-[11px] font-semibold shadow-2xs transition-all duration-150 active:scale-95 cursor-pointer disabled:opacity-50"
+                        >
+                          {syncingNoteId === note.id ? (
+                            <div className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <CloudLightning size={12} className="opacity-90" />
+                          )}
+                          <span>Push</span>
+                        </button>
 
                         <button
                           onClick={() => note.id !== undefined && navigate(`/edit-note/${note.id}`)}
@@ -465,7 +477,7 @@ const handlePushSingleNote = async (note: any) => {
                 ))
               )}
             </tbody>
-          </table>
+           </table>
         </div>
 
         {/* Pagination Panel */}
@@ -512,9 +524,7 @@ const handlePushSingleNote = async (note: any) => {
         )}
       </div>
 
-      {/* 🌐 CUSTOM SMALL MODALS */}
-      
-      {/* ১. অফলাইন মোডাল */}
+      {/* Offline Modal */}
       {modalType === 'offline' && (
         <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl border border-slate-100 shadow-xl max-w-xs w-full p-5 space-y-4 text-center relative animate-in fade-in zoom-in-95 duration-150">
@@ -531,7 +541,7 @@ const handlePushSingleNote = async (note: any) => {
         </div>
       )}
 
-      {/* ২. একক নোট রিমুভ নিশ্চিতকরণ মোডাল */}
+      {/* Delete Confirmation Modal */}
       {modalType === 'delete' && (
         <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl border border-slate-100 shadow-xl max-w-xs w-full p-5 space-y-4 text-center relative animate-in fade-in zoom-in-95 duration-150">
@@ -550,7 +560,7 @@ const handlePushSingleNote = async (note: any) => {
         </div>
       )}
 
-      {/* ৩. সম্পূর্ণ ডাটাবেজ ক্লিয়ার নিশ্চিতকরণ মোডাল */}
+      {/* Clear Database Modal */}
       {modalType === 'clear_db' && (
         <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl border border-slate-100 shadow-xl max-w-xs w-full p-5 space-y-4 text-center relative animate-in fade-in zoom-in-95 duration-150">
@@ -569,7 +579,7 @@ const handlePushSingleNote = async (note: any) => {
         </div>
       )}
 
-      {/* ৪. অল পুশ ডাটা সাকসেস মোডাল */}
+      {/* Push Success Modal */}
       {modalType === 'push_success' && (
         <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl border border-slate-100 shadow-xl max-w-xs w-full p-5 space-y-4 text-center relative animate-in fade-in zoom-in-95 duration-150">

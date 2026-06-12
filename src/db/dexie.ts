@@ -1,8 +1,24 @@
 import Dexie, { type Table } from 'dexie';
 import type { CaseNote } from '../types/caseNote';
 import type { AssessmentFormData } from '../types/assessment';
-// ইডিট করার সুবিধার জন্য আইডিসহ একটি ইন্টারফেস তৈরি করুন
-export interface AssessmentRecord extends AssessmentFormData{
+
+export interface ThreatAssessment {
+  id?: number;
+  dateStarted: string;
+  dateCompleted: string;
+  presentDanger: string[];
+  presentDangerComments: string;
+  impendingDanger: string[];
+  impendingDangerComments: string;
+  alternativeIntervention: string[];
+  alternativeInterventionComments: string;
+  safetyThreshold: string;
+  isCompleted: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AssessmentRecord extends AssessmentFormData {
   id?: number;
   caseName: string;
   childIsSafe: string;
@@ -10,12 +26,15 @@ export interface AssessmentRecord extends AssessmentFormData{
 
 export class HemaiyaOfflineDatabase extends Dexie {
   caseNotes!: Table<CaseNote>;
-assessments!: Table<AssessmentRecord>; // 🌟 একই ডিবিতে নতুন টেবিল
+  assessments!: Table<AssessmentRecord>;
+  threatAssessments!: Table<ThreatAssessment>;
+
   constructor() {
     super('HemaiyaOfflineDB');
-    this.version(2).stores({
+    this.version(4).stores({
       caseNotes: '++id, date, serviceType, caseName, childName, createdAt',
-      assessments: '++id, name, dateStarted, isCompleted' // 🌟 নতুন টেবিল ইনডেক্স
+      assessments: '++id, name, dateStarted, isCompleted',
+      threatAssessments: '++id, dateStarted, dateCompleted, safetyThreshold, isCompleted, createdAt, updatedAt'
     });
   }
 }

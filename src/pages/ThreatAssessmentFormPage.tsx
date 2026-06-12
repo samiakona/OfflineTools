@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { 
   ArrowLeft, Calendar, ShieldCheck, AlertTriangle, 
-  FileText, Check, Lock, HelpCircle 
+  FileText, Check, Lock, HelpCircle, Edit2 
 } from 'lucide-react';
 import { CustomSelect } from '../components/Common/CustomSelect';
-import { assessmentService } from '../services/assessmentService';
+import { threatAssessmentService } from '../services/threatAssessmentService';
 
-// আপনার থ্রেট অ্যাসেসমেন্টের ফিল্ড স্ট্রাকচার টাইপস
 interface ThreatAssessmentFormData {
   dateStarted: string;
   dateCompleted: string;
@@ -24,8 +23,10 @@ interface ThreatAssessmentFormData {
 export const ThreatAssessmentFormPage: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
+  const location = useLocation();
   const isEditMode = !!id;
-
+  const isViewMode = location.state?.mode === 'view';
+  
   const [formData, setFormData] = useState<ThreatAssessmentFormData>({
     dateStarted: new Date().toISOString().split('T')[0],
     dateCompleted: '',
@@ -39,29 +40,34 @@ export const ThreatAssessmentFormPage: React.FC = () => {
     isCompleted: false 
   });
 
-  // 📥 ইডিট মোড হলে ডেটা লোড করার মেকানিজম
+  const [isSaving, setIsSaving] = useState(false);
+  const [isUnlocking, setIsUnlocking] = useState(false);
+  const [originalIsCompleted, setOriginalIsCompleted] = useState<boolean>(false);
+
+  // Load data for edit/view mode
   useEffect(() => {
-    if (isEditMode && id) {
+    if (id) {
       const fetchAssessment = async () => {
         try {
-          const record = await assessmentService.getAssessmentById(Number(id));
+          const record = await threatAssessmentService.getAssessmentById(Number(id));
           if (record) {
-            const recordData = record as Partial<ThreatAssessmentFormData>;
-            setFormData({
-              dateStarted: recordData.dateStarted ?? '',
-              dateCompleted: recordData.dateCompleted ?? '',
-              presentDanger: recordData.presentDanger ?? [],
-              presentDangerComments: recordData.presentDangerComments ?? '',
-              impendingDanger: recordData.impendingDanger ?? [],
-              impendingDangerComments: recordData.impendingDangerComments ?? '',
-              alternativeIntervention: recordData.alternativeIntervention ?? [],
-              alternativeInterventionComments: recordData.alternativeInterventionComments ?? '',
-              safetyThreshold: recordData.safetyThreshold ?? '',
-              isCompleted: recordData.isCompleted ?? false,
-            });
+            const loadedData = {
+              dateStarted: record.dateStarted ?? '',
+              dateCompleted: record.dateCompleted ?? '',
+              presentDanger: record.presentDanger ?? [],
+              presentDangerComments: record.presentDangerComments ?? '',
+              impendingDanger: record.impendingDanger ?? [],
+              impendingDangerComments: record.impendingDangerComments ?? '',
+              alternativeIntervention: record.alternativeIntervention ?? [],
+              alternativeInterventionComments: record.alternativeInterventionComments ?? '',
+              safetyThreshold: record.safetyThreshold ?? '',
+              isCompleted: record.isCompleted ?? false,
+            };
+            setFormData(loadedData);
+            setOriginalIsCompleted(record.isCompleted ?? false);
           } else {
             console.error("Record not found");
-            navigate('/assessments');
+            navigate('/threat-assessments');
           }
         } catch (error) {
           console.error("Error loading assessment:", error);
@@ -69,34 +75,58 @@ export const ThreatAssessmentFormPage: React.FC = () => {
       };
       fetchAssessment();
     }
-  }, [id, isEditMode, navigate]);
+  }, [id, navigate]);
 
-  // যদি completed মার্ক করা থাকে, তবে পুরো ফর্ম Read-Only হবে
-  const isReadOnly = formData.isCompleted;
+  // Determine if form should be read-only
+  const isReadOnly = isViewMode || (isEditMode && originalIsCompleted && !isUnlocking);
 
   const updateField = (name: keyof ThreatAssessmentFormData, value: any) => {
     if (isReadOnly) return;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  // 🏁 ফর্ম সাবমিট হ্যান্ডলার (Add এবং Edit দুটিই হ্যান্ডেল করবে)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isReadOnly) return;
-
+    
+    // Validation: If completed but dateCompleted is empty
+    if (formData.isCompleted && !formData.dateCompleted) {
+      alert('Please select a completion date before marking as completed.');
+      return;
+    }
+    
+    console.log('=== SAVING ASSESSMENT ===');
+    console.log('dateCompleted:', formData.dateCompleted);
+    console.log('isCompleted:', formData.isCompleted);
+    
+    setIsSaving(true);
     try {
+      // IMPORTANT: Save exactly what's in form, don't clear dateCompleted
+      let dataToSave = { ...formData };
+      
+      // Only clear dateCompleted if NOT completed AND user never set it
+      // But if user manually set dateCompleted, keep it even if not completed
+      // So we don't clear dateCompleted at all - let user decide
+      
+      console.log('Data to save:', dataToSave);
+
       if (isEditMode && id) {
-        await assessmentService.updateAssessment(Number(id), formData as any);
+        await threatAssessmentService.updateAssessment(Number(id), dataToSave);
+        setOriginalIsCompleted(formData.isCompleted);
       } else {
-        await assessmentService.createAssessment(formData as any);
+        const newId = await threatAssessmentService.createAssessment(dataToSave);
+        console.log('Created with ID:', newId);
       }
-      navigate('/assessments');
+      
+      navigate('/threat-assessment');
     } catch (error) {
       console.error("Failed to save:", error);
+      alert("Failed to save assessment. Please try again.");
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  // Checkbox হ্যান্ডলিং লজিক
   const handleToggleCheckbox = (arrayName: 'presentDanger' | 'impendingDanger' | 'alternativeIntervention', itemValue: string) => {
     if (isReadOnly) return;
     setFormData(prev => {
@@ -108,7 +138,56 @@ export const ThreatAssessmentFormPage: React.FC = () => {
     });
   };
 
-  // --- ডাটা চেকলিস্ট সমূহ ---
+  const handleCompletionToggle = () => {
+    if (isReadOnly) return;
+    const newCompletedStatus = !formData.isCompleted;
+    setFormData(prev => ({
+      ...prev,
+      isCompleted: newCompletedStatus,
+    }));
+  };
+
+  const handleUnlockAndEdit = async () => {
+    const confirmUnlock = window.confirm(
+      'This assessment is currently locked (completed). Do you want to unlock it to make changes?\n\n' +
+      'Note: This will mark it as pending again.'
+    );
+    
+    if (confirmUnlock && id) {
+      setIsUnlocking(true);
+      try {
+        await threatAssessmentService.updateAssessment(Number(id), {
+          isCompleted: false,
+          // Keep the dateCompleted, don't clear it
+        });
+        
+        const record = await threatAssessmentService.getAssessmentById(Number(id));
+        if (record) {
+          setFormData({
+            dateStarted: record.dateStarted ?? '',
+            dateCompleted: record.dateCompleted ?? '',
+            presentDanger: record.presentDanger ?? [],
+            presentDangerComments: record.presentDangerComments ?? '',
+            impendingDanger: record.impendingDanger ?? [],
+            impendingDangerComments: record.impendingDangerComments ?? '',
+            alternativeIntervention: record.alternativeIntervention ?? [],
+            alternativeInterventionComments: record.alternativeInterventionComments ?? '',
+            safetyThreshold: record.safetyThreshold ?? '',
+            isCompleted: false,
+          });
+          setOriginalIsCompleted(false);
+        }
+      } catch (error) {
+        console.error("Error unlocking assessment:", error);
+        alert("Failed to unlock assessment. Please try again.");
+      } finally {
+        setIsUnlocking(false);
+      }
+    }
+  };
+
+  // ... rest of your arrays (presentDangerCategories, impendingDangerItems, alternativeInterventionItems) remain the same ...
+
   const presentDangerCategories = [
     { cat: "General", items: ["Severe, extreme maltreatment suspected, observed or confirmed", "Child has multiple or different kinds of injuries", "Child has injuries to face or head", "Maltreatment demonstrates bizarre cruelty", "Maltreatment of several victims suspected, observed or confirmed", "Maltreatment appears premeditated", "Dangerous (life threatening) living arrangements", "Current report represents a serious threat and there is a history of referrals", "Child is accessible to person alleged to have maltreated the child"] },
     { cat: "When considered in the context of the Child", items: ["Parent's viewpoint of child is bizarre", "Child is unable to care for self and unsupervised or alone at time of referral", "Child needs medical attention at time of referral", "Child is profoundly fearful or anxious of home situation at time of referral"] },
@@ -121,43 +200,70 @@ export const ThreatAssessmentFormPage: React.FC = () => {
   ];
 
   const alternativeInterventionItems = [
-    "Failure to provide medical treatment for a non-emergent, minor discomfort, illness for the child.", "Potential safety concerns in and around the home.", "Reoccurring / Ongoing cases of head lice, scabies, etc.", "Sudden decline in child’s normal behaviors or displays minor behavioral problems, physical, mental, or social concerns.", "Complaint about child’s hygiene have been made by others (school, etc.), child may emit body odor or mouth odor or peers will not play with child.", "Failure to provide adequate clothing, shelter, or nutrition that does not present an immediate safety or health issue to the child.", "Child/Family would benefit from additional resources and might not be receiving such services.", "Family reports trouble accessing resources, supports, etc.", "Family reports insufficient resources and supports resulting in child’s well-being concerns."
+    "Failure to provide medical treatment for a non-emergent, minor discomfort, illness for the child.", "Potential safety concerns in and around the home.", "Reoccurring / Ongoing cases of head lice, scabies, etc.", "Sudden decline in child's normal behaviors or displays minor behavioral problems, physical, mental, or social concerns.", "Complaint about child's hygiene have been made by others (school, etc.), child may emit body odor or mouth odor or peers will not play with child.", "Failure to provide adequate clothing, shelter, or nutrition that does not present an immediate safety or health issue to the child.", "Child/Family would benefit from additional resources and might not be receiving such services.", "Family reports trouble accessing resources, supports, etc.", "Family reports insufficient resources and supports resulting in child's well-being concerns."
   ];
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 text-slate-800 pb-16 antialiased p-2">
       
-      {/* 🔝 Top Header Navigation */}
+      {/* Header Navigation */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-200/80 pb-5 gap-4">
         <div className="flex items-center gap-4">
           <button 
             type="button"
-            onClick={() => navigate('/assessments')} 
+            onClick={() => navigate('/threat-assessments')} 
             className="p-2.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 rounded-xl transition-all shadow-2xs active:scale-95"
           >
             <ArrowLeft size={16} strokeWidth={2.5} />
           </button>
           <div>
             <h2 className="text-2xl font-black text-slate-900 tracking-tight">
-              {isEditMode ? 'Edit Threat Assessment' : 'Create Threat Assessment'}
+              {isViewMode ? 'View Threat Assessment' : isEditMode ? 'Edit Threat Assessment' : 'Create Threat Assessment'}
             </h2>
             <p className="text-xs font-medium text-slate-500 mt-0.5">
-              Identify and analyze immediate safety, environmental and behavioral threat modules.
+              {isViewMode ? 'Review safety and threat assessment details' : 'Identify and analyze immediate safety, environmental and behavioral threat modules.'}
             </p>
           </div>
         </div>
 
-        {isReadOnly && (
-          <span className="flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200/60 px-3.5 py-2 rounded-full shadow-2xs">
-            <Lock size={14} /> Locked Asset (Read-Only)
-          </span>
-        )}
+        <div className="flex gap-2">
+          {isEditMode && originalIsCompleted && !isViewMode && (
+            <button
+              type="button"
+              onClick={handleUnlockAndEdit}
+              disabled={isUnlocking}
+              className="flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200/60 px-3.5 py-2 rounded-full shadow-2xs hover:bg-amber-100 transition disabled:opacity-50"
+            >
+              <Edit2 size={14} /> {isUnlocking ? 'Unlocking...' : 'Unlock & Edit'}
+            </button>
+          )}
+          
+          {originalIsCompleted && !isViewMode && !isUnlocking && (
+            <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-3.5 py-2 rounded-full shadow-2xs">
+              <Lock size={14} /> Completed & Locked
+            </span>
+          )}
+          
+          {isViewMode && (
+            <span className="flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200/60 px-3.5 py-2 rounded-full shadow-2xs">
+              <Lock size={14} /> View Only Mode
+            </span>
+          )}
+        </div>
       </div>
 
-      {/* 📦 Form Container */}
+      {isEditMode && originalIsCompleted && !isViewMode && !isUnlocking && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center gap-2">
+          <Lock size={14} className="text-amber-600" />
+          <p className="text-xs text-amber-700">
+            This assessment is locked because it's marked as completed. Click "Unlock & Edit" to make changes.
+          </p>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="bg-slate-50/60 rounded-2xl p-2 sm:p-4 space-y-6">
         
-        {/* 📅 Card 1: Logistics & Timestamps */}
+        {/* Date Section */}
         <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/70 shadow-xs grid grid-cols-1 md:grid-cols-2 gap-5">
           <div>
             <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
@@ -179,14 +285,25 @@ export const ThreatAssessmentFormPage: React.FC = () => {
             <input 
               type="date" 
               value={formData.dateCompleted} 
-              onChange={(e) => updateField('dateCompleted', e.target.value)} 
+              onChange={(e) => updateField('dateCompleted', e.target.value)}
               disabled={isReadOnly}
               className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl bg-white disabled:bg-slate-100/80 disabled:text-slate-400 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 font-medium transition shadow-2xs text-slate-700"
             />
+            {formData.dateCompleted && (
+              <p className="text-[10px] text-blue-500 mt-1 flex items-center gap-1">
+                <Calendar size={10} /> Selected: {formData.dateCompleted}
+              </p>
+            )}
+            {formData.isCompleted && (
+              <p className="text-[10px] text-emerald-600 mt-1 flex items-center gap-1">
+                <Check size={10} /> Assessment will be locked when saved
+              </p>
+            )}
           </div>
         </div>
 
-        {/* 🔴 Card 2: Present Danger Threats */}
+        {/* Rest of your form sections remain the same */}
+        {/* Present Danger Section */}
         <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/70 shadow-xs space-y-5">
           <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5 text-red-700 font-extrabold text-xs tracking-wider uppercase">
             <div className="p-1 bg-red-50 rounded-md"><AlertTriangle size={14} /></div>
@@ -199,13 +316,13 @@ export const ThreatAssessmentFormPage: React.FC = () => {
                 <h4 className="font-extrabold text-slate-400 text-[10px] uppercase tracking-wider mb-1.5">{subCat.cat}</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                   {subCat.items.map(item => (
-                    <label key={item} className="flex items-start gap-2.5 p-2 bg-slate-50/40 border border-slate-100 rounded-xl hover:bg-slate-50 font-medium transition cursor-pointer text-slate-700">
+                    <label key={item} className={`flex items-start gap-2.5 p-2 border rounded-xl transition font-medium text-slate-700 ${formData.presentDanger.includes(item) ? 'bg-red-50/50 border-red-200' : 'bg-slate-50/40 border-slate-100 hover:bg-slate-50'}`}>
                       <input 
                         type="checkbox" 
                         disabled={isReadOnly} 
                         checked={formData.presentDanger.includes(item)} 
                         onChange={() => handleToggleCheckbox('presentDanger', item)} 
-                        className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 accent-blue-600" 
+                        className="mt-0.5 h-4 w-4 rounded border-slate-300 text-red-600 accent-red-600 disabled:opacity-60" 
                       />
                       <span className="leading-tight">{item}</span>
                     </label>
@@ -215,7 +332,6 @@ export const ThreatAssessmentFormPage: React.FC = () => {
             ))}
           </div>
 
-          {/* Comments input field */}
           <div className="pt-2">
             <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
               <FileText size={13} className="text-slate-400" /> Present Danger Comments
@@ -226,12 +342,12 @@ export const ThreatAssessmentFormPage: React.FC = () => {
               disabled={isReadOnly} 
               rows={3} 
               placeholder="Provide situational analysis context for present danger threats..." 
-              className="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-blue-500 font-medium transition shadow-2xs resize-none" 
+              className="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-blue-500 font-medium transition shadow-2xs resize-none disabled:bg-slate-100/80" 
             />
           </div>
         </div>
 
-        {/* 🟠 Card 3: Impending Danger Threats */}
+        {/* Impending Danger Section */}
         <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/70 shadow-xs space-y-5">
           <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5 text-orange-700 font-extrabold text-xs tracking-wider uppercase">
             <div className="p-1 bg-orange-50 rounded-md"><ShieldCheck size={14} /></div>
@@ -240,20 +356,19 @@ export const ThreatAssessmentFormPage: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
             {impendingDangerItems.map(item => (
-              <label key={item} className="flex items-start gap-2.5 p-2 bg-slate-50/40 border border-slate-100 rounded-xl hover:bg-slate-50 font-medium transition cursor-pointer text-slate-700">
+              <label key={item} className={`flex items-start gap-2.5 p-2 border rounded-xl transition font-medium text-slate-700 ${formData.impendingDanger.includes(item) ? 'bg-orange-50/50 border-orange-200' : 'bg-slate-50/40 border-slate-100 hover:bg-slate-50'}`}>
                 <input 
                   type="checkbox" 
                   disabled={isReadOnly} 
                   checked={formData.impendingDanger.includes(item)} 
                   onChange={() => handleToggleCheckbox('impendingDanger', item)} 
-                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 accent-blue-600" 
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-orange-600 accent-orange-600 disabled:opacity-60" 
                 />
                 <span className="leading-tight">{item}</span>
               </label>
             ))}
           </div>
 
-          {/* Comments input field */}
           <div className="pt-2">
             <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
               <FileText size={13} className="text-slate-400" /> Impending Danger Comments
@@ -264,12 +379,12 @@ export const ThreatAssessmentFormPage: React.FC = () => {
               disabled={isReadOnly} 
               rows={3} 
               placeholder="Provide situational analysis context for impending danger threats..." 
-              className="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-blue-500 font-medium transition shadow-2xs resize-none" 
+              className="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-blue-500 font-medium transition shadow-2xs resize-none disabled:bg-slate-100/80" 
             />
           </div>
         </div>
 
-        {/* 🔵 Card 4: Alternative Intervention */}
+        {/* Alternative Intervention Section */}
         <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/70 shadow-xs space-y-5">
           <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5 text-blue-700 font-extrabold text-xs tracking-wider uppercase">
             <div className="p-1 bg-blue-50 rounded-md"><HelpCircle size={14} /></div>
@@ -278,20 +393,19 @@ export const ThreatAssessmentFormPage: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
             {alternativeInterventionItems.map(item => (
-              <label key={item} className="flex items-start gap-2.5 p-2 bg-slate-50/40 border border-slate-100 rounded-xl hover:bg-slate-50 font-medium transition cursor-pointer text-slate-700">
+              <label key={item} className={`flex items-start gap-2.5 p-2 border rounded-xl transition font-medium text-slate-700 ${formData.alternativeIntervention.includes(item) ? 'bg-blue-50/50 border-blue-200' : 'bg-slate-50/40 border-slate-100 hover:bg-slate-50'}`}>
                 <input 
                   type="checkbox" 
                   disabled={isReadOnly} 
                   checked={formData.alternativeIntervention.includes(item)} 
                   onChange={() => handleToggleCheckbox('alternativeIntervention', item)} 
-                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 accent-blue-600" 
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 accent-blue-600 disabled:opacity-60" 
                 />
                 <span className="leading-tight">{item}</span>
               </label>
             ))}
           </div>
 
-          {/* Comments input field */}
           <div className="pt-2">
             <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
               <FileText size={13} className="text-slate-400" /> Alternative Intervention Comments
@@ -302,12 +416,12 @@ export const ThreatAssessmentFormPage: React.FC = () => {
               disabled={isReadOnly} 
               rows={3} 
               placeholder="Provide analysis notes on resource needs or minor health/behavior concerns..." 
-              className="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-blue-500 font-medium transition shadow-2xs resize-none" 
+              className="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-blue-500 font-medium transition shadow-2xs resize-none disabled:bg-slate-100/80" 
             />
           </div>
         </div>
 
-        {/* ⚙️ Card 5: Safety Threshold Dropdown */}
+        {/* Safety Threshold Dropdown */}
         <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/70 shadow-xs space-y-4">
           <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5 text-slate-700 font-extrabold text-xs tracking-wider uppercase">
             <div className="p-1 bg-slate-100 rounded-md"><ShieldCheck size={14} /></div>
@@ -319,11 +433,11 @@ export const ThreatAssessmentFormPage: React.FC = () => {
               value={formData.safetyThreshold}
               placeholder="Select Option"
               options={[
-                { value: 'Safe', label: 'Safe (Server Consequence for the child)' },
-                { value: 'Conditionally Safe', label: 'Immediate Or Occur will in the near future' },
-                { value: 'Unsafe', label: 'Vulnerability Identified' },
-                { value: 'Adult', label: 'Out Of Control: No Adult In Household to Prevent' },
-                  { value: 'Behaviors', label: 'Behaviors,Condiotions Are Specific, Observable And Clearly Understood' }
+                { value: 'Safe', label: 'Safe' },
+                { value: 'Conditionally Safe', label: 'Conditionally Safe' },
+                { value: 'Unsafe', label: 'Unsafe' },
+                { value: 'Adult', label: 'Out Of Control: No Adult In Household' },
+                { value: 'Behaviors', label: 'Behaviors, Conditions Are Specific' }
               ]}
               onChange={(val) => updateField('safetyThreshold', val)}
               disabled={isReadOnly}
@@ -331,61 +445,84 @@ export const ThreatAssessmentFormPage: React.FC = () => {
           </div>
         </div>
 
-        {/* 🔒 Card 6: Read-Only Governance Panel */}
-        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/70 shadow-xs space-y-3">
-          <div 
-            onClick={() => {
-              updateField('isCompleted', !formData.isCompleted);
-            }}
-            className={`flex items-start gap-4 bg-slate-50/50 hover:bg-slate-50 border border-slate-200/50 p-4 rounded-xl select-none transition-all group ${isReadOnly ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}
-          >
-            <div className="relative flex items-center justify-center w-5 h-5 mt-0.5 shrink-0">
-              <input 
-                type="checkbox" 
-                checked={formData.isCompleted} 
-                readOnly
-                className="sr-only" 
-              />
-              <div className={`w-5 h-5 bg-white border rounded-md flex items-center justify-center transition-all shadow-3xs group-hover:border-slate-400 ${formData.isCompleted ? 'border-emerald-600' : 'border-slate-300'}`}>
-                {formData.isCompleted && (
-                  <Check size={14} strokeWidth={3} className="text-emerald-600 animate-in zoom-in-75 duration-100" />
-                )}
+        {/* Completion Checkbox */}
+        {!isViewMode && (!originalIsCompleted || isUnlocking) && (
+          <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/70 shadow-xs space-y-3">
+            <div 
+              onClick={handleCompletionToggle}
+              className={`flex items-start gap-4 bg-slate-50/50 border p-4 rounded-xl select-none transition-all group ${
+                isReadOnly ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:bg-slate-50 border-slate-200/50'
+              }`}
+            >
+              <div className="relative flex items-center justify-center w-5 h-5 mt-0.5 shrink-0">
+                <input 
+                  type="checkbox" 
+                  checked={formData.isCompleted} 
+                  readOnly
+                  className="sr-only" 
+                />
+                <div className={`w-5 h-5 bg-white border rounded-md flex items-center justify-center transition-all shadow-3xs ${
+                  formData.isCompleted 
+                    ? 'border-emerald-600 bg-emerald-50' 
+                    : 'border-slate-300 group-hover:border-slate-400'
+                }`}>
+                  {formData.isCompleted && (
+                    <Check size={14} strokeWidth={3} className="text-emerald-600" />
+                  )}
+                </div>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <Lock size={13} className="text-slate-400" /> 
+                  {formData.isCompleted ? 'Assessment Completed & Locked' : 'Mark as Completed (Lock Assessment)'}
+                </span>
+                <span className="text-[10px] font-medium text-slate-400/90 mt-0.5">
+                  {formData.isCompleted 
+                    ? 'This assessment will be locked when saved. No further changes can be made.' 
+                    : 'Once marked as completed, the assessment will be locked and become read-only.'}
+                </span>
               </div>
             </div>
-            <div className="flex flex-col">
-              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                <Lock size={13} className="text-slate-400" /> Mark as completed. (And lock this Assessment as Read Only)
-              </span>
-              <span className="text-[10px] font-medium text-slate-400/90 mt-0.5">Freezes this record asset. Safe lock mechanism prevents further mutations.</span>
-            </div>
           </div>
-        </div>
+        )}
 
-        {/* 🏁 Bottom Action Buttons Panel */}
-        <div className="flex justify-end items-center gap-3 pt-5 border-t border-slate-200/80">
-          <button 
-            type="button" 
-            onClick={() => navigate('/assessments')} 
-            className="px-5 py-2.5 border border-slate-200 text-slate-700 rounded-xl bg-white hover:bg-slate-50 text-xs font-bold shadow-2xs transition-all active:scale-95"
-          >
-            Cancel
-          </button>
-          
-          <button 
-            type="submit" 
-            disabled={isReadOnly}
-            className={`px-6 py-2.5 rounded-xl text-xs font-bold text-white shadow-md transition-all active:scale-95 ${
-              isReadOnly 
-                ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
-                : formData.isCompleted 
-                  ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 shadow-emerald-600/10' 
+        {/* Action Buttons */}
+        {!isViewMode && (
+          <div className="flex justify-end items-center gap-3 pt-5 border-t border-slate-200/80">
+            <button 
+              type="button" 
+              onClick={() => navigate('/threat-assessments')} 
+              className="px-5 py-2.5 border border-slate-200 text-slate-700 rounded-xl bg-white hover:bg-slate-50 text-xs font-bold shadow-2xs transition-all active:scale-95"
+            >
+              Cancel
+            </button>
+            
+            <button 
+              type="submit" 
+              disabled={isSaving || (isEditMode && originalIsCompleted && !isUnlocking)}
+              className={`px-6 py-2.5 rounded-xl text-xs font-bold text-white shadow-md transition-all active:scale-95 ${
+                isSaving ? 'bg-slate-400 cursor-wait' :
+                (isEditMode && originalIsCompleted && !isUnlocking) 
+                  ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
                   : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-blue-600/10'
-            }`}
-          >
-            Save Assessment
-          </button>
-        </div>
+              }`}
+            >
+              {isSaving ? 'Saving...' : (isEditMode ? 'Save Changes' : 'Create Assessment')}
+            </button>
+          </div>
+        )}
 
+        {isViewMode && (
+          <div className="flex justify-end">
+            <button 
+              type="button" 
+              onClick={() => navigate('/threat-assessment')} 
+              className="px-6 py-2.5 rounded-xl text-xs font-bold bg-slate-600 text-white hover:bg-slate-700 transition"
+            >
+              Back to List
+            </button>
+          </div>
+        )}
       </form>
     </div>
   );

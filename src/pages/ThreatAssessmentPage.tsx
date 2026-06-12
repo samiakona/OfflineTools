@@ -5,51 +5,39 @@ import {
   Zap, CloudLightning, WifiOff, CheckCircle2, Eye
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { threatAssessmentService } from '../services/threatAssessmentService';
+import type { ThreatAssessment } from '../types/ThreatAssessment';
 
-// Dummy data interface
-interface ThreatAssessment {
-  id: number;
-  caseName: string;
-  dateStarted: string;
-  safetyThreshold: 'Low' | 'Medium' | 'High' | 'Critical';
-  dateCompleted: string | null;
-  status: 'Pending' | 'Completed';
-}
-
-// Dummy data
-const dummyAssessments: ThreatAssessment[] = [
-  { id: 1, caseName: 'Case #2024-001', dateStarted: '2024-01-15', safetyThreshold: 'Low', dateCompleted: '2024-01-20', status: 'Completed' },
-  { id: 2, caseName: 'Case #2024-002', dateStarted: '2024-01-18', safetyThreshold: 'High', dateCompleted: null, status: 'Pending' },
-  { id: 3, caseName: 'Case #2024-003', dateStarted: '2024-01-20', safetyThreshold: 'Medium', dateCompleted: '2024-01-25', status: 'Completed' },
-  { id: 4, caseName: 'Case #2024-004', dateStarted: '2024-01-22', safetyThreshold: 'Critical', dateCompleted: null, status: 'Pending' },
-  { id: 5, caseName: 'Case #2024-005', dateStarted: '2024-01-25', safetyThreshold: 'Low', dateCompleted: null, status: 'Pending' },
-  { id: 6, caseName: 'Case #2024-006', dateStarted: '2024-01-28', safetyThreshold: 'High', dateCompleted: '2024-02-01', status: 'Completed' },
-  { id: 7, caseName: 'Case #2024-007', dateStarted: '2024-02-01', safetyThreshold: 'Medium', dateCompleted: null, status: 'Pending' },
-];
-
-const ThreatAssessmentPage: React.FC = () => {
+export const ThreatAssessmentPage: React.FC = () => {
   const [assessments, setAssessments] = useState<ThreatAssessment[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(true);
-const navigate = useNavigate();
-  // Modal states
+  const navigate = useNavigate();
+
   const [modalType, setModalType] = useState<'offline' | 'delete' | 'clear_db' | 'push_success' | 'none'>('none');
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedAssessment, setSelectedAssessment] = useState<ThreatAssessment | null>(null);
+  const [syncStatus, setSyncStatus] = useState<{ syncing: boolean; lastSync: Date | null }>({
+    syncing: false,
+    lastSync: null
+  });
 
-  // Load dummy data
   const loadAssessments = async () => {
     setIsLoading(true);
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setAssessments(dummyAssessments);
-    setIsLoading(false);
+    try {
+      const data = await threatAssessmentService.getAllAssessments();
+      setAssessments(data);
+    } catch (error) {
+      console.error('Error loading assessments:', error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
     loadAssessments();
   }, []);
 
-  // Close modal on Escape key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') closeModal();
@@ -59,84 +47,134 @@ const navigate = useNavigate();
   }, [modalType]);
 
   const handleEdit = (id: number) => {
-    console.log('Edit assessment:', id);
-    // navigate(`/edit-threat-assessment/${id}`);
+    navigate(`/add-threat/${id}`);
   };
 
   const handleView = (id: number) => {
-    console.log('View assessment:', id);
-    // navigate(`/view-threat-assessment/${id}`);
+    navigate(`/add-threat/${id}`, { state: { mode: 'view' } });
   };
 
   const openDeleteModal = (id: number) => {
+    const assessment = assessments.find(a => a.id === id);
     setSelectedId(id);
+    setSelectedAssessment(assessment || null);
     setModalType('delete');
   };
 
   const closeModal = () => {
     setModalType('none');
     setSelectedId(null);
+    setSelectedAssessment(null);
   };
 
-  // Delete record
   const confirmDelete = async () => {
     if (selectedId !== null) {
-      setAssessments(prev => prev.filter(item => item.id !== selectedId));
-      closeModal();
+      try {
+        await threatAssessmentService.deleteAssessment(selectedId);
+        await loadAssessments();
+        closeModal();
+      } catch (error) {
+        console.error('Error deleting assessment:', error);
+      }
     }
   };
 
-  // Clear all data
   const handleConfirmClearDatabase = async () => {
     setIsLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 300));
-    setAssessments([]);
-    setModalType('none');
-    setIsLoading(false);
+    try {
+      const allAssessments = await threatAssessmentService.getAllAssessments();
+      for (const assessment of allAssessments) {
+        if (assessment.id) {
+          await threatAssessmentService.deleteAssessment(assessment.id);
+        }
+      }
+      await loadAssessments();
+      setModalType('none');
+    } catch (error) {
+      console.error('Error clearing database:', error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  // Search filter logic
+  const handlePushSingle = async (id: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const assessment = assessments.find(a => a.id === id);
+    if (!assessment) return;
+
+    setSyncStatus(prev => ({ ...prev, syncing: true }));
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    console.log('Pushing assessment to server:', assessment);
+    setModalType('push_success');
+    setSyncStatus(prev => ({ syncing: false, lastSync: new Date() }));
+  };
+
+  const handlePushAll = async () => {
+    setSyncStatus(prev => ({ ...prev, syncing: true }));
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    console.log('Pushing all assessments to server:', assessments);
+    setModalType('push_success');
+    setSyncStatus(prev => ({ syncing: false, lastSync: new Date() }));
+  };
+
   const filteredAssessments = assessments.filter(item => {
     const query = searchQuery.toLowerCase();
-    const matchesCase = item.caseName.toLowerCase().includes(query);
+    const matchesStarted = item.dateStarted.toLowerCase().includes(query);
     const matchesThreshold = item.safetyThreshold.toLowerCase().includes(query);
-    const matchesStatus = item.status.toLowerCase().includes(query);
-    return matchesCase || matchesThreshold || matchesStatus;
+    const matchesStatus = item.isCompleted ? 'completed' : 'pending';
+    const matchesCompleted = matchesStatus.includes(query);
+    const matchesDateCompleted = item.dateCompleted ? item.dateCompleted.includes(query) : false;
+    return matchesStarted || matchesThreshold || matchesCompleted || matchesDateCompleted;
   });
 
-  // Get safety threshold badge styles
-  const getThresholdStyles = (threshold: ThreatAssessment['safetyThreshold']) => {
+  const formatDate = (dateString: string) => {
+    if (!dateString) return null;
+    try {
+      return new Date(dateString).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      });
+    } catch (error) {
+      return dateString;
+    }
+  };
+
+  const getThresholdStyles = (threshold: string) => {
     switch (threshold) {
-      case 'Low':
+      case 'Safe':
         return 'bg-emerald-50 border-emerald-200 text-emerald-700';
-      case 'Medium':
+      case 'Conditionally Safe':
         return 'bg-amber-50 border-amber-200 text-amber-700';
-      case 'High':
+      case 'Unsafe':
         return 'bg-orange-50 border-orange-200 text-orange-700';
-      case 'Critical':
-        return 'bg-rose-50 border-rose-200 text-rose-700 animate-pulse';
+      case 'Adult':
+      case 'Behaviors':
+        return 'bg-rose-50 border-rose-200 text-rose-700';
       default:
         return 'bg-slate-50 border-slate-200 text-slate-600';
     }
   };
 
-  const getThresholdIcon = (threshold: ThreatAssessment['safetyThreshold']) => {
+  const getThresholdIcon = (threshold: string) => {
     switch (threshold) {
-      case 'Low':
+      case 'Safe':
         return <ShieldCheck size={12} />;
-      case 'Medium':
+      case 'Conditionally Safe':
         return <AlertTriangle size={12} />;
-      case 'High':
+      case 'Unsafe':
         return <ShieldAlert size={12} />;
-      case 'Critical':
+      case 'Adult':
+      case 'Behaviors':
         return <ShieldAlert size={12} />;
       default:
         return null;
     }
   };
 
-  const targetAssessment = assessments.find(a => a.id === selectedId);
-  const selectedCaseName = targetAssessment?.caseName || 'Unnamed Case';
+  const totalAssessments = assessments.length;
+  const completedCount = assessments.filter(a => a.isCompleted).length;
+  const pendingCount = totalAssessments - completedCount;
 
   return (
     <div className="space-y-6 text-slate-800 pb-16 antialiased p-2 relative max-w-[1600px] mx-auto sm:p-4">
@@ -150,30 +188,30 @@ const navigate = useNavigate();
           </p>
         </div>
 
-        {/* Top Action Buttons */}
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+          {syncStatus.lastSync && (
+            <span className="text-[10px] text-slate-400 bg-slate-100 px-2 py-1 rounded-full">
+              Last sync: {syncStatus.lastSync.toLocaleTimeString()}
+            </span>
+          )}
           
-          {/* All Data Push Button */}
           <button
-            onClick={() => setModalType('push_success')}
-            className="flex items-center gap-1.5 bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 text-white px-3 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 active:scale-95 shadow-2xs cursor-pointer"
-            title="Push all local data to server"
+            onClick={handlePushAll}
+            disabled={syncStatus.syncing || assessments.length === 0}
+            className="flex items-center gap-1.5 bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 text-white px-3 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 active:scale-95 shadow-2xs cursor-pointer disabled:opacity-50"
           >
             <Zap size={14} />
-            <span>All Data Push</span>
+            <span>{syncStatus.syncing ? 'Syncing...' : 'All Data Push'}</span>
           </button>
 
-          {/* Clear DB Button */}
           <button
             onClick={() => setModalType('clear_db')}
             className="flex items-center gap-1.5 border border-red-200/80 text-red-600 hover:text-red-700 bg-white hover:bg-red-50/60 px-3 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 active:scale-95 shadow-2xs cursor-pointer"
-            title="Clear all local data"
           >
             <Trash2 size={14} className="opacity-90" />
             <span>Clear DB</span>
           </button>
 
-          {/* New Assessment Button */}
           <button 
             onClick={() => navigate('/add-threat')}
             className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-md shadow-blue-600/10 transition-all active:scale-95 cursor-pointer"
@@ -184,7 +222,44 @@ const navigate = useNavigate();
         </div>
       </div>
 
-      {/* Search & Filter Bar */}
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-xl p-4 border border-blue-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold text-blue-600 uppercase tracking-wider">Total Assessments</p>
+              <p className="text-2xl font-black text-blue-900 mt-1">{totalAssessments}</p>
+            </div>
+            <div className="bg-blue-200/50 p-3 rounded-lg">
+              <ClipboardList size={24} className="text-blue-600" />
+            </div>
+          </div>
+        </div>
+        <div className="bg-gradient-to-br from-emerald-50 to-emerald-100/50 rounded-xl p-4 border border-emerald-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider">Completed</p>
+              <p className="text-2xl font-black text-emerald-900 mt-1">{completedCount}</p>
+            </div>
+            <div className="bg-emerald-200/50 p-3 rounded-lg">
+              <CheckCircle2 size={24} className="text-emerald-600" />
+            </div>
+          </div>
+        </div>
+        <div className="bg-gradient-to-br from-amber-50 to-amber-100/50 rounded-xl p-4 border border-amber-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold text-amber-600 uppercase tracking-wider">Pending</p>
+              <p className="text-2xl font-black text-amber-900 mt-1">{pendingCount}</p>
+            </div>
+            <div className="bg-amber-200/50 p-3 rounded-lg">
+              <AlertTriangle size={24} className="text-amber-600" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Search Bar */}
       <div className="flex flex-col sm:flex-row gap-3 justify-between items-center bg-slate-50/50 p-3 rounded-xl border border-slate-200/60">
         <div className="relative w-full sm:w-72">
           <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
@@ -194,7 +269,7 @@ const navigate = useNavigate();
             type="text" 
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)} 
-            placeholder="Filter by case, threshold, or status..." 
+            placeholder="Filter by date, threshold, status, or completion date..." 
             className="w-full pl-9 pr-4 py-2 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-blue-500 font-medium transition"
           />
         </div>
@@ -203,221 +278,334 @@ const navigate = useNavigate();
         </div>
       </div>
 
-      {/* Data Table Container */}
+      {/* Data Table */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200/80">
-                <th className="p-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Case / Identifier</th>
+                <th className="p-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">ID / Identifier</th>
                 <th className="p-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Date Started</th>
                 <th className="p-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center">Safety Threshold</th>
                 <th className="p-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Date Completed</th>
-                <th className="p-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center w-56">Actions</th>
+                <th className="p-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center">Status</th>
+                <th className="p-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center w-72">Actions</th>
                </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {isLoading ? (
                 <tr>
-                  <td colSpan={5} className="p-8 text-center text-slate-400 text-xs font-medium">
-                    Loading threat assessments...
+                  <td colSpan={6} className="p-8 text-center text-slate-400 text-xs font-medium">
+                    <div className="flex items-center justify-center gap-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                      Loading threat assessments...
+                    </div>
                   </td>
                 </tr>
               ) : filteredAssessments.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="p-8 text-center text-slate-400 text-xs font-medium italic">
+                  <td colSpan={6} className="p-8 text-center text-slate-400 text-xs font-medium italic">
                     No threat assessments recorded.
                   </td>
                 </tr>
               ) : (
-                filteredAssessments.map((item) => (
-                  <tr key={item.id} className="hover:bg-slate-50/40 transition-colors group">
-                    
-                    {/* Case Name / Identifier */}
-                    <td className="p-4 whitespace-nowrap">
-                      <div className="flex items-center gap-2.5">
-                        <div className="p-2 bg-slate-50 rounded-lg text-slate-500 group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors">
-                          <ClipboardList size={15} />
+                filteredAssessments.map((item) => {
+                  return (
+                    <tr key={item.id} className="hover:bg-slate-50/40 transition-colors group">
+                      
+                      <td className="p-4 whitespace-nowrap">
+                        <div className="flex items-center gap-2.5">
+                          <div className="p-2 bg-slate-50 rounded-lg text-slate-500 group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors">
+                            <ClipboardList size={15} />
+                          </div>
+                          <div>
+                            <span className="text-xs font-bold text-slate-900">
+                              Assessment #{item.id}
+                            </span>
+                            <p className="text-[10px] text-slate-400 mt-0.5">
+                              Updated: {formatDate(item.updatedAt)}
+                            </p>
+                          </div>
                         </div>
-                        <span className="text-xs font-bold text-slate-900">
-                          {item.caseName}
+                       </td>
+
+                      <td className="p-4 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
+                          <Calendar size={13} className="text-slate-400" />
+                          {formatDate(item.dateStarted)}
+                        </div>
+                      </td>
+
+                      <td className="p-4 whitespace-nowrap text-center">
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold border ${getThresholdStyles(item.safetyThreshold)}`}>
+                          {getThresholdIcon(item.safetyThreshold)}
+                          {item.safetyThreshold}
                         </span>
-                      </div>
-                    </td>
+                      </td>
 
-                    {/* Date Started */}
-                    <td className="p-4 whitespace-nowrap">
-                      <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
-                        <Calendar size={13} className="text-slate-400" />
-                        {item.dateStarted}
-                      </div>
-                    </td>
+                      <td className="p-4 whitespace-nowrap">
+                        {item.dateCompleted ? (
+                          <div className="flex items-center gap-1.5">
+                            <Calendar size={13} className="text-emerald-500" />
+                            <span className="text-xs font-semibold text-emerald-700">
+                              {formatDate(item.dateCompleted)}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-slate-400">—</span>
+                        )}
+                      </td>
 
-                    {/* Safety Threshold Badge */}
-                    <td className="p-4 whitespace-nowrap text-center">
-                      <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold border ${getThresholdStyles(item.safetyThreshold)}`}>
-                        {getThresholdIcon(item.safetyThreshold)}
-                        {item.safetyThreshold}
-                      </span>
-                    </td>
+                      <td className="p-4 whitespace-nowrap text-center">
+                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold border ${
+                          item.isCompleted 
+                            ? 'bg-emerald-50 border-emerald-200 text-emerald-700' 
+                            : 'bg-amber-50 border-amber-200 text-amber-700'
+                        }`}>
+                          {item.isCompleted ? <CheckCircle2 size={10} /> : <AlertTriangle size={10} />}
+                          {item.isCompleted ? 'Completed' : 'Pending'}
+                        </span>
+                      </td>
 
-                    {/* Date Completed */}
-                    <td className="p-4 whitespace-nowrap">
-                      <span className={`text-xs font-semibold ${!item.dateCompleted || item.status === 'Pending' ? 'text-amber-500 italic font-medium' : 'text-slate-600'}`}>
-                        {item.dateCompleted || 'Pending'}
-                      </span>
-                    </td>
+                      {/* Action Buttons - Light colors */}
+                      <td className="p-4 whitespace-nowrap text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          
+                          <button
+                            type="button"
+                            onClick={(e) => handlePushSingle(item.id!, e)}
+                            disabled={syncStatus.syncing}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-600 rounded-lg text-[11px] font-medium transition-all duration-150 active:scale-95 cursor-pointer disabled:opacity-50"
+                            title="Push data to server"
+                          >
+                            <CloudLightning size={12} />
+                            <span>Push</span>
+                          </button>
 
-                    {/* Action Buttons */}
-                    <td className="p-4 whitespace-nowrap text-center">
-                      <div className="flex items-center justify-center gap-1.5">
-                        
-                        {/* Push Button */}
-                        <button
-                          type="button"
-                          onClick={() => setModalType('offline')}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-50/60 hover:bg-blue-50 border border-blue-200 text-blue-600 rounded-xl text-[11px] font-bold shadow-2xs transition-all duration-150 active:scale-95 cursor-pointer"
-                          title="Push data to server"
-                        >
-                          <CloudLightning size={12} className="opacity-90" />
-                          <span>Push</span>
-                        </button>
+                          {item.isCompleted ? (
+                            <button 
+                              type="button"
+                              onClick={() => handleView(item.id!)} 
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-600 rounded-lg text-[11px] font-medium transition-all duration-150 active:scale-95 cursor-pointer"
+                              title="View Assessment"
+                            >
+                              <Eye size={12} />
+                              <span>View</span>
+                            </button>
+                          ) : (
+                            <button 
+                              type="button"
+                              onClick={() => handleEdit(item.id!)} 
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-600 rounded-lg text-[11px] font-medium transition-all duration-150 active:scale-95 cursor-pointer"
+                              title="Edit Assessment"
+                            >
+                              <Edit2 size={12} />
+                              <span>Edit</span>
+                            </button>
+                          )}
 
-                        {/* View Button */}
-                        <button 
-                          type="button"
-                          onClick={() => handleView(item.id)} 
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl border border-slate-200 bg-white transition shadow-3xs cursor-pointer text-[11px] font-bold"
-                          title="View Assessment"
-                        >
-                          <Eye size={12} className="text-slate-400 group-hover:text-emerald-500" />
-                          <span>View</span>
-                        </button>
-
-                        {/* Edit Button */}
-                        <button 
-                          type="button"
-                          onClick={() => handleEdit(item.id)} 
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-xl border border-slate-200 bg-white transition shadow-3xs cursor-pointer text-[11px] font-bold"
-                          title="Edit Assessment"
-                        >
-                          <Edit2 size={12} className="text-slate-400 group-hover:text-blue-500" />
-                          <span>Edit</span>
-                        </button>
-
-                        {/* Remove Button */}
-                        <button 
-                          type="button"
-                          onClick={() => openDeleteModal(item.id)} 
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-xl border border-rose-200 bg-white transition shadow-3xs cursor-pointer text-[11px] font-bold"
-                          title="Delete Record"
-                        >
-                          <Trash2 size={12} />
-                          <span>Remove</span>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                          <button 
+                            type="button"
+                            onClick={() => openDeleteModal(item.id!)} 
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 rounded-lg text-[11px] font-medium transition-all duration-150 active:scale-95 cursor-pointer"
+                            title="Delete Record"
+                          >
+                            <Trash2 size={12} />
+                            <span>Remove</span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Delete Confirmation Modal */}
-      {modalType === 'delete' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity" onClick={closeModal} />
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-200/80 max-w-md w-full overflow-hidden z-10 transform transition-all scale-100 animate-in zoom-in-95 duration-150">
-            <div className="flex justify-between items-center px-5 py-4 border-b border-slate-100 bg-slate-50/50">
-              <div className="flex items-center gap-2 text-rose-600 font-extrabold text-xs uppercase tracking-wider">
-                <AlertTriangle size={15} />
-                <span>Confirm Destructive Action</span>
+      {/* Professional Delete Confirmation Modal */}
+      {modalType === 'delete' && selectedAssessment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div 
+            className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm transition-all duration-200" 
+            onClick={closeModal} 
+          />
+          
+          {/* Modal */}
+          <div className="relative bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden transform transition-all duration-200 scale-100 animate-in fade-in zoom-in-95">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-rose-50 to-white">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-rose-100 rounded-full flex items-center justify-center">
+                  <Trash2 size={16} className="text-rose-600" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Delete Assessment</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">This action cannot be undone</p>
+                </div>
               </div>
-              <button onClick={closeModal} className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition cursor-pointer">
-                <X size={15} strokeWidth={2.5} />
+              <button 
+                onClick={closeModal} 
+                className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <X size={18} />
               </button>
             </div>
-            <div className="p-6 space-y-3">
-              <h3 className="text-base font-black text-slate-900 tracking-tight">Delete Threat Assessment?</h3>
-              <p className="text-xs font-medium text-slate-500 leading-relaxed">
-                You are about to permanently delete the threat assessment for: <br />
-                <span className="inline-block mt-1.5 font-bold text-slate-800 bg-slate-100 border border-slate-200 px-2 py-1 rounded-md text-[11px]">
-                  {selectedCaseName}
-                </span>
-              </p>
-              <div className="bg-rose-50 border border-rose-100 rounded-xl p-3 text-[10px] font-semibold text-rose-700 leading-normal">
-                ⚠️ Warning: This action will permanently remove the record from your database.
+
+            {/* Body */}
+            <div className="px-6 py-5">
+              <div className="flex flex-col items-center text-center">
+                <div className="w-14 h-14 bg-rose-50 rounded-full flex items-center justify-center mb-4">
+                  <AlertTriangle size={28} className="text-rose-500" />
+                </div>
+                <h4 className="text-lg font-bold text-slate-900 mb-2">Are you absolutely sure?</h4>
+                <p className="text-sm text-slate-500 mb-4">
+                  You are about to delete <span className="font-bold text-slate-800">Assessment #{selectedAssessment.id}</span>
+                </p>
+                <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 w-full">
+                  <p className="text-[11px] font-medium text-amber-700 flex items-center justify-center gap-2">
+                    <AlertTriangle size={12} />
+                    This will permanently remove this record from the database
+                  </p>
+                </div>
+                
+                {/* Assessment Details */}
+                <div className="mt-4 w-full bg-slate-50 rounded-xl p-3 text-left space-y-1.5">
+                  <p className="text-[10px] text-slate-500 flex justify-between">
+                    <span>Date Started:</span>
+                    <span className="font-medium text-slate-700">{formatDate(selectedAssessment.dateStarted) || selectedAssessment.dateStarted}</span>
+                  </p>
+                  {selectedAssessment.dateCompleted && (
+                    <p className="text-[10px] text-slate-500 flex justify-between">
+                      <span>Date Completed:</span>
+                      <span className="font-medium text-slate-700">{formatDate(selectedAssessment.dateCompleted)}</span>
+                    </p>
+                  )}
+                  <p className="text-[10px] text-slate-500 flex justify-between">
+                    <span>Safety Threshold:</span>
+                    <span className="font-medium text-slate-700">{selectedAssessment.safetyThreshold || 'Not set'}</span>
+                  </p>
+                  <p className="text-[10px] text-slate-500 flex justify-between">
+                    <span>Status:</span>
+                    <span className={`font-medium ${selectedAssessment.isCompleted ? 'text-emerald-600' : 'text-amber-600'}`}>
+                      {selectedAssessment.isCompleted ? 'Completed' : 'Pending'}
+                    </span>
+                  </p>
+                </div>
               </div>
             </div>
-            <div className="flex justify-end gap-2 px-5 py-3.5 bg-slate-50 border-t border-slate-100">
-              <button type="button" onClick={closeModal} className="px-4 py-2 border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 rounded-xl text-xs font-bold transition-all active:scale-95 shadow-3xs cursor-pointer">
+
+            {/* Footer */}
+            <div className="flex justify-end gap-3 px-6 py-4 bg-slate-50/50 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={closeModal}
+                className="px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all duration-150 active:scale-95"
+              >
                 Cancel
               </button>
-              <button type="button" onClick={confirmDelete} className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all active:scale-95 shadow-sm shadow-rose-600/10 cursor-pointer">
-                Confirm Remove
+              <button
+                type="button"
+                onClick={confirmDelete}
+                className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-rose-600 to-rose-700 rounded-xl hover:from-rose-700 hover:to-rose-800 shadow-md shadow-rose-600/20 transition-all duration-150 active:scale-95"
+              >
+                Delete Assessment
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Offline Push Alert Modal */}
-      {modalType === 'offline' && (
-        <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-xl max-w-xs w-full p-5 space-y-4 text-center relative animate-in fade-in zoom-in-95 duration-150">
-            <button onClick={closeModal} className="absolute top-3 right-3 text-slate-400 hover:text-slate-600 p-1 rounded-lg transition-colors cursor-pointer"><X size={15} /></button>
-            <div className="mx-auto w-11 h-11 bg-red-50 rounded-full flex items-center justify-center border border-red-100">
-              <WifiOff size={20} className="text-red-500" />
-            </div>
-            <div className="space-y-1">
-              <h4 className="text-sm font-bold text-slate-900">Connection Offline</h4>
-              <p className="text-xs text-slate-500 leading-relaxed">Please connect your wifi or internet connection for push data.</p>
-            </div>
-            <button onClick={closeModal} className="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs py-2.5 rounded-xl transition-all active:scale-98 cursor-pointer">Okay, Got it</button>
-          </div>
-        </div>
-      )}
-
-      {/* Clear Database Modal */}
+      {/* Clear Database Modal - Professional */}
       {modalType === 'clear_db' && (
-        <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-xl max-w-xs w-full p-5 space-y-4 text-center relative animate-in fade-in zoom-in-95 duration-150">
-            <div className="mx-auto w-11 h-11 bg-red-50 rounded-full flex items-center justify-center border border-red-100">
-              <Trash2 size={20} className="text-red-500" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={closeModal} />
+          <div className="relative bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden transform transition-all duration-200">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-red-50 to-white">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
+                  <Trash2 size={16} className="text-red-600" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Clear Database</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">Destructive action</p>
+                </div>
+              </div>
+              <button onClick={closeModal} className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg">
+                <X size={18} />
+              </button>
             </div>
-            <div className="space-y-1">
-              <h4 className="text-sm font-bold text-slate-900">Clear Entire Database?</h4>
-              <p className="text-xs text-slate-500 leading-relaxed">Are you sure you want to delete all threat assessments from the database? This will completely wipe the logs.</p>
+            <div className="px-6 py-5 text-center">
+              <div className="w-14 h-14 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertTriangle size={28} className="text-red-500" />
+              </div>
+              <h4 className="text-lg font-bold text-slate-900 mb-2">Clear Entire Database?</h4>
+              <p className="text-sm text-slate-500 mb-4">
+                This action will permanently delete all threat assessments from the database.
+              </p>
+              <div className="bg-red-50 border border-red-100 rounded-xl p-3">
+                <p className="text-[11px] font-medium text-red-700">
+                  ⚠️ This action cannot be undone. All data will be lost.
+                </p>
+              </div>
             </div>
-            <div className="flex items-center gap-2 pt-1">
-              <button onClick={closeModal} className="w-1/2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs py-2.5 rounded-xl transition-all active:scale-98 cursor-pointer">Cancel</button>
-              <button onClick={handleConfirmClearDatabase} className="w-1/2 bg-red-600 hover:bg-red-700 text-white font-semibold text-xs py-2.5 rounded-xl transition-all active:scale-98 shadow-xs cursor-pointer">Yes, Wipe DB</button>
+            <div className="flex justify-end gap-3 px-6 py-4 bg-slate-50/50 border-t border-slate-100">
+              <button onClick={closeModal} className="px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50">Cancel</button>
+              <button onClick={handleConfirmClearDatabase} className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-red-600 to-red-700 rounded-xl hover:from-red-700 hover:to-red-800 shadow-md">Yes, Delete All</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Push Success Modal */}
+      {/* Push Success Modal - Professional */}
       {modalType === 'push_success' && (
-        <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-xl max-w-xs w-full p-5 space-y-4 text-center relative animate-in fade-in zoom-in-95 duration-150">
-            <button onClick={closeModal} className="absolute top-3 right-3 text-slate-400 hover:text-slate-600 p-1 rounded-lg transition-colors cursor-pointer"><X size={15} /></button>
-            <div className="mx-auto w-11 h-11 bg-emerald-50 rounded-full flex items-center justify-center border border-emerald-100">
-              <CheckCircle2 size={20} className="text-emerald-500" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={closeModal} />
+          <div className="relative bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden transform transition-all duration-200">
+            <div className="px-6 py-5 text-center">
+              <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <CheckCircle2 size={32} className="text-emerald-500" />
+              </div>
+              <h4 className="text-lg font-bold text-slate-900 mb-2">Sync Successful!</h4>
+              <p className="text-sm text-slate-500">
+                Your secure threat assessment logs have been synced with the cloud repository.
+              </p>
+              <button 
+                onClick={closeModal} 
+                className="mt-5 w-full px-4 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-emerald-600 to-emerald-700 rounded-xl hover:from-emerald-700 hover:to-emerald-800 shadow-md transition-all duration-150"
+              >
+                Continue
+              </button>
             </div>
-            <div className="space-y-1">
-              <h4 className="text-sm font-bold text-slate-900">Sync Successful</h4>
-              <p className="text-xs text-slate-500 leading-relaxed">Your secure threat assessment logs have been synced with the cloud repository.</p>
-            </div>
-            <button onClick={closeModal} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs py-2.5 rounded-xl transition-all active:scale-98 shadow-xs cursor-pointer">Awesome</button>
           </div>
         </div>
       )}
 
+      {/* Offline Push Alert Modal - Professional */}
+      {modalType === 'offline' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={closeModal} />
+          <div className="relative bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden transform transition-all duration-200">
+            <div className="px-6 py-5 text-center">
+              <div className="w-16 h-16 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <WifiOff size={32} className="text-amber-500" />
+              </div>
+              <h4 className="text-lg font-bold text-slate-900 mb-2">No Internet Connection</h4>
+              <p className="text-sm text-slate-500 mb-4">
+                Please connect to WiFi or mobile data to sync your data to the cloud.
+              </p>
+              <button 
+                onClick={closeModal} 
+                className="w-full px-4 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-slate-700 to-slate-800 rounded-xl hover:from-slate-800 hover:to-slate-900 shadow-md transition-all duration-150"
+              >
+                Got it
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
-
-export default ThreatAssessmentPage;

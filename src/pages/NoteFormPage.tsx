@@ -17,12 +17,15 @@ const CLIENT_TYPES = [
   { value: '3', label: 'Group' }
 ];
 
+// Updated Appointment Statuses
 const APPOINTMENT_STATUSES = [
-  { value: 'Scheduled', label: 'Scheduled' },
-  { value: 'Completed', label: 'Completed' },
-  { value: 'Cancelled', label: 'Cancelled' },
-  { value: 'Rescheduled', label: 'Rescheduled' },
-  { value: 'No Show', label: 'No Show' }
+  { value: '1', label: 'Attended' },
+  { value: '2', label: 'Cancel By client' },
+  { value: '3', label: 'Cancel By provider' },
+  { value: '4', label: 'Cancel By FSP' },
+  { value: '5', label: 'No Show' },
+  { value: '6', label: 'Unable to See/Other' },
+  { value: '7', label: 'N/A' }
 ];
 
 const CONTACT_TYPES = [
@@ -108,20 +111,6 @@ const TIME_OPTIONS = (() => {
   return times;
 })();
 
-// Sample data
-const getChildrenList = () => [
-  { value: '1', label: 'Emma Thompson' },
-  { value: '2', label: 'Liam Garcia' },
-  { value: '3', label: 'Sophia Martinez' },
-  { value: '4', label: 'seko jk' }
-];
-
-const getParentsList = () => [
-  { value: '1', label: 'Sarah Thompson' },
-  { value: '2', label: 'Michael Garcia' },
-  { value: '3', label: 'David Martinez' }
-];
-
 export const NoteFormPage: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>(); 
@@ -132,7 +121,7 @@ export const NoteFormPage: React.FC = () => {
     date: new Date().toISOString().split('T')[0],
     time: '09:30 AM',
     childName: '',
-    appointmentStatus: 'Completed',
+    appointmentStatus: '1', // Defaulted to '1' (Attended) based on the new list
     nextAppointmentDate: '',
     nextAppointmentTime: '',
     contactType: '2', // Face to Face
@@ -151,8 +140,6 @@ export const NoteFormPage: React.FC = () => {
     clientName: '',
   });
 
-  const [childrenList] = useState(getChildrenList());
-  const [parentsList] = useState(getParentsList());
   const [auditData, setAuditData] = useState<{ createdBy: string; createdAt: number; updatedBy: string; updatedAt: number } | null>(null);
 
   const timeOptions = (() => {
@@ -187,17 +174,11 @@ export const NoteFormPage: React.FC = () => {
     updateField('clientName', '');
   };
 
-  const handleClientChange = (value: string) => {
-    updateField('clientId', value);
-    const clientList = formData.clientType === '0' ? childrenList : parentsList;
-    const selectedClient = clientList.find(c => c.value === value);
-    updateField('clientName', selectedClient?.label || '');
-  };
-
-  const getCurrentClientOptions = () => {
-    if (formData.clientType === '0') return childrenList;
-    if (formData.clientType === '1') return parentsList;
-    return [];
+  // Kept intact to avoid breaking logic if used elsewhere
+  const handleClientNameChange = (value: string) => {
+    updateField('clientName', value);
+    // Also syncing clientId with value just in case database schema expects it
+    updateField('clientId', value); 
   };
 
   useEffect(() => {
@@ -213,7 +194,7 @@ export const NoteFormPage: React.FC = () => {
             contactType: rest.contactType || '2',
             location: rest.location || '4',
             serviceType: rest.serviceType || '7',
-            appointmentStatus: rest.appointmentStatus || 'Completed',
+            appointmentStatus: rest.appointmentStatus || '1',
             notifyTeam: rest.notifyTeam !== undefined ? rest.notifyTeam : true,
             durationMinutes: rest.durationMinutes || 60,
           });
@@ -367,24 +348,22 @@ export const NoteFormPage: React.FC = () => {
               <label className="block text-[11px] font-bold text-slate-600 tracking-wide mb-1.5 flex items-center gap-1">
                 <User size={12} /> {formData.clientType === '0' ? 'Child Name' : formData.clientType === '1' ? 'Parent Name' : 'Client Name'} *
               </label>
-              {(formData.clientType === '0' || formData.clientType === '1') ? (
-                <CustomSelect 
-                  value={formData.clientId || ''}
-                  options={getCurrentClientOptions()}
-                  onChange={handleClientChange}
-                  disabled={isReadOnly}
-                  placeholder={`Select ${formData.clientType === '0' ? 'child' : 'parent'}`}
-                />
-              ) : (
-                <input 
-                  type="text"
-                  value={formData.clientName || ''}
-                  onChange={(e) => updateField('clientName', e.target.value)}
-                  disabled={isReadOnly}
-                  placeholder="Enter client name"
-                  className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white disabled:bg-slate-100/80 focus:outline-none focus:border-blue-500 transition shadow-2xs"
-                />
-              )}
+              {/* Changed drop-downs to direct text input fields per your request */}
+              <input 
+                type="text"
+                value={formData.clientName || ''}
+                onChange={(e) => handleClientNameChange(e.target.value)}
+                disabled={isReadOnly}
+                placeholder={
+                  formData.clientType === '0' 
+                    ? "Enter child name" 
+                    : formData.clientType === '1' 
+                      ? "Enter parent name" 
+                      : "Enter client name"
+                }
+                required
+                className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white disabled:bg-slate-100/80 focus:outline-none focus:border-blue-500 transition shadow-2xs font-medium"
+              />
             </div>
           </div>
 
