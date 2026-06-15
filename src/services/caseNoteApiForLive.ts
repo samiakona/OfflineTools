@@ -1,6 +1,6 @@
 // services/caseNoteApiForLive.ts
-const API_BASE_URL = 'https://localhost:44361/api/OfflineSync';
-//https://localhost:44361/api/OfflineSync/PushAddSafetyWorkerNoteWeb
+const API_BASE_URL = 'http://localhost:5096/api/casenote';
+
 export interface SyncResponse {
   success: boolean;
   message: string;
@@ -93,32 +93,34 @@ const getCaseEventLookupId = (serviceType: string): number => {
 // Helper function to format time to ISO string
 const formatTimeToISO = (dateStr: string, timeStr: string): string => {
   if (!dateStr || !timeStr) return new Date().toISOString();
-
+  
   const parsedDate = new Date(dateStr);
   const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
-
+  
   if (match) {
     let hour = parseInt(match[1]);
     const minute = parseInt(match[2]);
     const period = match[3].toUpperCase();
-
+    
     if (period === 'PM' && hour !== 12) hour += 12;
     if (period === 'AM' && hour === 12) hour = 0;
-
+    
     parsedDate.setHours(hour, minute, 0, 0);
   }
-
+  
   return parsedDate.toISOString();
 };
 
 // API Health Check
 export const checkAPIHealth = async (): Promise<boolean> => {
   try {
-    // Use a simple GET request to the base URL to check if the server is reachable,
-    // avoiding a 400 Bad Request from hitting a POST endpoint without a valid body.
-    const baseUrl = API_BASE_URL.split('/api')[0];
-    await fetch(`${baseUrl}`, { method: 'GET', mode: 'no-cors' });
-    return true;
+    const response = await fetch(`${API_BASE_URL}/test`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const result = await response.json();
+    console.log('API Health Check:', result);
+    return result.success === true;
   } catch (error) {
     console.error('API health check failed:', error);
     return false;
@@ -130,8 +132,8 @@ export const syncSingleNote = async (caseNumber: string, noteData: any): Promise
   try {
     const safeNoteData = noteData || {};
     const encodedCaseNumber = encodeURIComponent(caseNumber || 'DEFAULT-CASE');
-    const url = `${API_BASE_URL}/PushAddSafetyWorkerNoteWeb?caseNumber=${encodedCaseNumber}`;
-
+    const url = `${API_BASE_URL}/sync?caseNumber=${encodedCaseNumber}`;
+    
     console.log('🔄 Syncing note for case:', caseNumber);
     console.log('📦 Original note data:', safeNoteData);
 
@@ -140,14 +142,14 @@ export const syncSingleNote = async (caseNumber: string, noteData: any): Promise
     const eventTime = safeNoteData.date && safeNoteData.time 
       ? formatTimeToISO(safeNoteData.date, safeNoteData.time)
       : new Date().toISOString();
-
+    
     // Next appointment (if any)
     let nextAppointmentDate = null;
     let nextAppointmentTime = null;
-
+    
     if (safeNoteData.nextAppointmentDate) {
       nextAppointmentDate = new Date(safeNoteData.nextAppointmentDate).toISOString();
-
+      
       if (safeNoteData.nextAppointmentTime) {
         nextAppointmentTime = formatTimeToISO(
           safeNoteData.nextAppointmentDate, 
@@ -163,7 +165,7 @@ export const syncSingleNote = async (caseNumber: string, noteData: any): Promise
       recordedOn: new Date().toISOString(),
       createdBy: safeNoteData.teamMember || 'Kona_Supervisor',
       createdOn: new Date().toISOString(),
-      clientType: safeNoteData.clientType !== undefined && safeNoteData.clientType !== null ? parseInt(safeNoteData.clientType, 10) : 0,
+      clientType: parseInt(safeNoteData.clientType) || 2,
       eventDate: eventDate,
       eventTime: eventTime,
       duration: safeNoteData.durationMinutes || 60,
@@ -176,9 +178,7 @@ export const syncSingleNote = async (caseNumber: string, noteData: any): Promise
       selectedAdditionalServiceList: safeNoteData.additionalServices || [],
       notes: safeNoteData.narrative || safeNoteData.notes || '',
       recipients: safeNoteData.otherAttendees || safeNoteData.teamMember || 'Kona_Supervisor',
-      notifyAll: safeNoteData.notifyTeam === true,
-      isCompleted: safeNoteData.isCompleted || false,
-      people: safeNoteData.people || null
+      notifyAll: safeNoteData.notifyTeam === true
     };
 
     console.log('📤 Final Backend Payload:', JSON.stringify(payload, null, 2));
@@ -199,17 +199,8 @@ export const syncSingleNote = async (caseNumber: string, noteData: any): Promise
 
     const result = await response.json();
     console.log('✅ Sync Response:', result);
-
-    // Map the backend response to our expected SyncResponse interface
-    // The backend returns an object like { message: "...", caseId: 14, ... }
-    // Since we reached here without a non-200 status, we consider it a success.
-    return {
-      success: true, // or we can check result.message.includes('Successfully') if we want to be stricter
-      message: result.message || 'Note synced successfully',
-      syncedId: result.caseId, // Or whichever ID is appropriate
-      caseNumber: caseNumber
-    };
-
+    return result;
+    
   } catch (error: any) {
     console.error('❌ Sync error:', error);
     return {

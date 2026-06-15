@@ -34,7 +34,8 @@ export class HemaiyaOfflineDatabase extends Dexie {
     this.version(4).stores({
       caseNotes: '++id, date, serviceType, caseName, childName, createdAt',
       assessments: '++id, name, dateStarted, isCompleted',
-      threatAssessments: '++id, dateStarted, dateCompleted, safetyThreshold, isCompleted, createdAt, updatedAt'
+      threatAssessments: '++id, dateStarted, dateCompleted, safetyThreshold, isCompleted, createdAt, updatedAt',
+      homeStudyAssessments: '++id, caregiverId, assessmentDate, isCompleted'
     });
   }
 }

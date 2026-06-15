@@ -106,7 +106,7 @@ export const ThreatAssessmentPage: React.FC = () => {
     await new Promise(resolve => setTimeout(resolve, 1500));
     console.log('Pushing assessment to server:', assessment);
     setModalType('push_success');
-    setSyncStatus(prev => ({ syncing: false, lastSync: new Date() }));
+    // setSyncStatus(prev => ({ syncing: false, lastSync: new Date() }));
   };
 
   const handlePushAll = async () => {
@@ -114,7 +114,7 @@ export const ThreatAssessmentPage: React.FC = () => {
     await new Promise(resolve => setTimeout(resolve, 2000));
     console.log('Pushing all assessments to server:', assessments);
     setModalType('push_success');
-    setSyncStatus(prev => ({ syncing: false, lastSync: new Date() }));
+    // setSyncStatus(prev => ({ syncing: false, lastSync: new Date() }));
   };
 
   const filteredAssessments = assessments.filter(item => {

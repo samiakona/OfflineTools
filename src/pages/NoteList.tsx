@@ -48,7 +48,7 @@ export const NoteList: React.FC = () => {
   const [modalType, setModalType] = useState<'offline' | 'delete' | 'clear_db' | 'push_success' | 'none'>('none');
   const [selectedNoteId, setSelectedNoteId] = useState<number | null>(null);
 
-  const { isSyncing, syncProgress, syncNote, syncAllLocalNotes, checkAPI } = useCaseNoteSync();
+  const {  syncProgress, syncNote, syncAllLocalNotes, checkAPI } = useCaseNoteSync();
 
   // Single note push handler with individual loading
   const handlePushSingleNote = async (note: any, event: React.MouseEvent) => {
