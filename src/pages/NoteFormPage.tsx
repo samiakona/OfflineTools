@@ -89,14 +89,6 @@ const SERVICE_TYPES = [
   { value: '24', label: 'Update Case Plan' }
 ];
 
-const TEAM_MEMBERS = [
-  { value: 'Jahanara_Suchi, Supervisor (Supervisor)', label: 'Jahanara_Suchi, Supervisor (Supervisor)' },
-  { value: 'Rahat_Keramat, Case Worker', label: 'Rahat_Keramat, Case Worker' },
-  { value: 'Tasnim_Alam, Field Officer', label: 'Tasnim_Alam, Field Officer' },
-  { value: 'Kona_Supervisor', label: 'Kona_Supervisor' },
-  { value: 'Masum_Sup, Supervisor', label: 'Masum_Sup, Supervisor' }
-];
-
 // Time options for dropdown (30-minute intervals)
 const TIME_OPTIONS = (() => {
   const times = [];
@@ -348,7 +340,6 @@ export const NoteFormPage: React.FC = () => {
               <label className="block text-[11px] font-bold text-slate-600 tracking-wide mb-1.5 flex items-center gap-1">
                 <User size={12} /> {formData.clientType === '0' ? 'Child Name' : formData.clientType === '1' ? 'Parent Name' : 'Client Name'} *
               </label>
-              {/* Changed drop-downs to direct text input fields per your request */}
               <input 
                 type="text"
                 value={formData.clientName || ''}
@@ -515,11 +506,14 @@ export const NoteFormPage: React.FC = () => {
               <label className="block text-[11px] font-bold text-slate-600 tracking-wide mb-1.5 flex items-center gap-1">
                 <Users size={12} /> Team Member
               </label>
-              <CustomSelect 
+              {/* ড্রপডাউন পরিবর্তন করে ইনপুট ফিল্ড বসানো হয়েছে */}
+              <input 
+                type="text"
                 value={formData.teamMember}
-                options={TEAM_MEMBERS}
-                onChange={(val) => updateField('teamMember', val)}
+                onChange={(e) => updateField('teamMember', e.target.value)}
                 disabled={isReadOnly}
+                placeholder="Enter team member name"
+                className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white disabled:bg-slate-100/80 focus:outline-none focus:border-blue-500 transition shadow-2xs font-medium"
               />
             </div>
             <div>
