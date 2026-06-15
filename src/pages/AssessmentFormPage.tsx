@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { 
   ArrowLeft, Calendar, ShieldCheck, Home, 
-  User, AlertTriangle, FileText, Check, Lock 
+  User, AlertTriangle, FileText, Check, Lock, Hash 
 } from 'lucide-react';
 import { CustomSelect } from '../components/Common/CustomSelect';
 import { assessmentService } from '../services/assessmentService';
@@ -13,7 +13,8 @@ export const AssessmentFormPage: React.FC = () => {
   const { id } = useParams<{ id: string }>(); // URL থেকে ID নেওয়ার জন্য
   const isEditMode = !!id;
 
-  const [formData, setFormData] = useState<AssessmentFormData>({
+  const [formData, setFormData] = useState<AssessmentFormData & { caseNumber?: string }>({
+    caseNumber: '', // 👈 নতুন Case Number স্টেট (কোনো পুরাতন ডেটা রিমুভ করা হয়নি)
     dateStarted: new Date().toISOString().split('T')[0],
     dateCompleted: '',
     name: '',
@@ -63,13 +64,12 @@ export const AssessmentFormPage: React.FC = () => {
   // যদি আগে থেকেই রেকর্ডটি Completed মার্ক করা থাকে, তবে পুরো ফর্ম Read-Only হবে
   const isReadOnly = formData.isCompleted;
 
-  const updateField = (name: keyof AssessmentFormData, value: any) => {
+  const updateField = (name: string, value: any) => {
     if (isReadOnly) return; // লকড থাকলে কোনো চেঞ্জ করতে দেবে না
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   // 🏁 ফর্ম সাবমিট হ্যান্ডলার (Add এবং Edit দুটিই হ্যান্ডেল করবে)
-// 🏁 ফর্ম সাবমিট হ্যান্ডলার (Add এবং Edit দুটিই হ্যান্ডেল করবে)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isReadOnly) return; // সেফটি গার্ড
@@ -134,7 +134,7 @@ export const AssessmentFormPage: React.FC = () => {
             <ArrowLeft size={16} strokeWidth={2.5} />
           </button>
           <div>
-            {/* 🌟 ডাইনামিক হেডিং (ইডিট নাকি ক্রিয়েট মোড তার ওপর ভিত্তি করে) */}
+            {/* 🌟 ডাইনামিক হেডিং (ইডিট নাকি ক্রিয়েট মোড তার ওপর ভিত্তি করে) */}
             <h2 className="text-2xl font-black text-slate-900 tracking-tight">
               {isEditMode ? 'Edit Assessment' : 'Create New Assessment'}
             </h2>
@@ -154,8 +154,8 @@ export const AssessmentFormPage: React.FC = () => {
       {/* 📦 Form Container */}
       <form onSubmit={handleSubmit} className="bg-slate-50/60 rounded-2xl p-2 sm:p-4 space-y-6">
         
-        {/* 📅 Card 1: Logistics & Timestamps */}
-        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/70 shadow-xs grid grid-cols-1 md:grid-cols-2 gap-5">
+        {/* 📅 Card 1: Logistics & Timestamps (এটিকে ৩টি কলামের গ্রিড করা হয়েছে) */}
+        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/70 shadow-xs grid grid-cols-1 md:grid-cols-3 gap-5">
           <div>
             <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
               <Calendar size={13} className="text-slate-400" /> Date Assessment Started *
@@ -169,6 +169,7 @@ export const AssessmentFormPage: React.FC = () => {
               className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl bg-white disabled:bg-slate-100/80 disabled:text-slate-400 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 font-medium transition shadow-2xs text-slate-700"
             />
           </div>
+
           <div>
             <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
               <Calendar size={13} className="text-slate-400" /> Date Assessment Completed
@@ -181,8 +182,22 @@ export const AssessmentFormPage: React.FC = () => {
               className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl bg-white disabled:bg-slate-100/80 disabled:text-slate-400 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 font-medium transition shadow-2xs text-slate-700"
             />
           </div>
-        </div>
 
+          {/* 🔗 ৩ নম্বর ইনপুট ফিল্ড: Case Number */}
+          <div>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+              <Hash size={13} className="text-slate-400" /> Case Number
+            </label>
+            <input 
+              type="text" 
+              placeholder="Enter case number"
+              value={formData.caseNumber || ''} 
+              onChange={(e) => updateField('caseNumber', e.target.value)} 
+              disabled={isReadOnly}
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl bg-white disabled:bg-slate-100/80 disabled:text-slate-400 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 font-medium transition shadow-2xs text-slate-700"
+            />
+          </div>
+        </div>
         {/* 👤 Card 2: Demographics Information */}
         <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/70 shadow-xs space-y-4">
           <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5 text-blue-700 font-extrabold text-xs tracking-wider uppercase">

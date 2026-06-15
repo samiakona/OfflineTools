@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   ClipboardList, Plus, Edit2, Trash2, 
   AlertTriangle, ShieldCheck, ShieldAlert, Calendar, Search, X,
-  Zap, CloudLightning, WifiOff, CheckCircle2, Eye
+  Zap, CloudLightning, WifiOff, CheckCircle2, Eye, Hash
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { threatAssessmentService } from '../services/threatAssessmentService';
@@ -106,7 +106,6 @@ export const ThreatAssessmentPage: React.FC = () => {
     await new Promise(resolve => setTimeout(resolve, 1500));
     console.log('Pushing assessment to server:', assessment);
     setModalType('push_success');
-    // setSyncStatus(prev => ({ syncing: false, lastSync: new Date() }));
   };
 
   const handlePushAll = async () => {
@@ -114,17 +113,17 @@ export const ThreatAssessmentPage: React.FC = () => {
     await new Promise(resolve => setTimeout(resolve, 2000));
     console.log('Pushing all assessments to server:', assessments);
     setModalType('push_success');
-    // setSyncStatus(prev => ({ syncing: false, lastSync: new Date() }));
   };
 
   const filteredAssessments = assessments.filter(item => {
     const query = searchQuery.toLowerCase();
-    const matchesStarted = item.dateStarted.toLowerCase().includes(query);
-    const matchesThreshold = item.safetyThreshold.toLowerCase().includes(query);
+    const matchesStarted = item.dateStarted?.toLowerCase().includes(query);
+    const matchesThreshold = item.safetyThreshold?.toLowerCase().includes(query);
     const matchesStatus = item.isCompleted ? 'completed' : 'pending';
     const matchesCompleted = matchesStatus.includes(query);
     const matchesDateCompleted = item.dateCompleted ? item.dateCompleted.includes(query) : false;
-    return matchesStarted || matchesThreshold || matchesCompleted || matchesDateCompleted;
+    const matchesCaseNumber = item.caseNumber ? String(item.caseNumber).toLowerCase().includes(query) : false;
+    return matchesStarted || matchesThreshold || matchesCompleted || matchesDateCompleted || matchesCaseNumber;
   });
 
   const formatDate = (dateString: string) => {
@@ -269,7 +268,7 @@ export const ThreatAssessmentPage: React.FC = () => {
             type="text" 
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)} 
-            placeholder="Filter by date, threshold, status, or completion date..." 
+            placeholder="Filter by date, threshold, status, or case number..." 
             className="w-full pl-9 pr-4 py-2 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-blue-500 font-medium transition"
           />
         </div>
@@ -284,7 +283,7 @@ export const ThreatAssessmentPage: React.FC = () => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200/80">
-                <th className="p-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">ID / Identifier</th>
+                <th className="p-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Case Number</th>
                 <th className="p-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Date Started</th>
                 <th className="p-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center">Safety Threshold</th>
                 <th className="p-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Date Completed</th>
@@ -316,18 +315,15 @@ export const ThreatAssessmentPage: React.FC = () => {
                       <td className="p-4 whitespace-nowrap">
                         <div className="flex items-center gap-2.5">
                           <div className="p-2 bg-slate-50 rounded-lg text-slate-500 group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors">
-                            <ClipboardList size={15} />
+                            <Hash size={15} />
                           </div>
                           <div>
-                            <span className="text-xs font-bold text-slate-900">
-                              Assessment #{item.id}
+                            <span className="text-xs font-black text-slate-900 tracking-tight">
+                              {item.caseNumber ? item.caseNumber : ``}
                             </span>
-                            <p className="text-[10px] text-slate-400 mt-0.5">
-                              Updated: {formatDate(item.updatedAt)}
-                            </p>
                           </div>
                         </div>
-                       </td>
+                      </td>
 
                       <td className="p-4 whitespace-nowrap">
                         <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
@@ -367,7 +363,7 @@ export const ThreatAssessmentPage: React.FC = () => {
                         </span>
                       </td>
 
-                      {/* Action Buttons - Light colors */}
+                      {/* Action Buttons */}
                       <td className="p-4 whitespace-nowrap text-center">
                         <div className="flex items-center justify-center gap-2">
                           
@@ -424,104 +420,53 @@ export const ThreatAssessmentPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Professional Delete Confirmation Modal */}
+      {/* --- CLEAN & CLEAN DELETE CONFIRMATION MODAL --- */}
       {modalType === 'delete' && selectedAssessment && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          {/* Backdrop */}
-          <div 
-            className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm transition-all duration-200" 
-            onClick={closeModal} 
-          />
+          <div className="fixed inset-0 bg-slate-950/40  transition-opacity duration-200" onClick={closeModal} />
           
-          {/* Modal */}
-          <div className="relative bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden transform transition-all duration-200 scale-100 animate-in fade-in zoom-in-95">
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-rose-50 to-white">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-rose-100 rounded-full flex items-center justify-center">
-                  <Trash2 size={16} className="text-rose-600" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-900">Delete Assessment</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">This action cannot be undone</p>
-                </div>
-              </div>
+          <div className="relative bg-white rounded-2xl shadow-xl max-w-sm w-full overflow-hidden transform transition-all p-6 text-center animate-in fade-in zoom-in-95 duration-150">
+            {/* Close Accent Cross */}
+            <button onClick={closeModal} className="absolute top-4 right-4 p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+              <X size={16} />
+            </button>
+
+            {/* Warning Trash Icon Center */}
+            <div className="w-12 h-12 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-3.5">
+              <Trash2 size={22} className="text-rose-600" />
+            </div>
+
+            {/* Modal Heading & Description */}
+            <h3 className="text-base font-extrabold text-slate-900 tracking-tight">Delete Assessment?</h3>
+            <p className="text-xs text-slate-500 mt-1 px-2">
+              Are you sure you want to permanently delete {selectedAssessment.caseNumber ? <>Case <span className="font-bold text-slate-700">#{selectedAssessment.caseNumber}</span></> : 'this record'}? This action cannot be undone.
+            </p>
+
+            {/* Action Buttons Row */}
+            <div className="flex items-center gap-2 mt-5">
               <button 
+                type="button" 
                 onClick={closeModal} 
-                className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            {/* Body */}
-            <div className="px-6 py-5">
-              <div className="flex flex-col items-center text-center">
-                <div className="w-14 h-14 bg-rose-50 rounded-full flex items-center justify-center mb-4">
-                  <AlertTriangle size={28} className="text-rose-500" />
-                </div>
-                <h4 className="text-lg font-bold text-slate-900 mb-2">Are you absolutely sure?</h4>
-                <p className="text-sm text-slate-500 mb-4">
-                  You are about to delete <span className="font-bold text-slate-800">Assessment #{selectedAssessment.id}</span>
-                </p>
-                <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 w-full">
-                  <p className="text-[11px] font-medium text-amber-700 flex items-center justify-center gap-2">
-                    <AlertTriangle size={12} />
-                    This will permanently remove this record from the database
-                  </p>
-                </div>
-                
-                {/* Assessment Details */}
-                <div className="mt-4 w-full bg-slate-50 rounded-xl p-3 text-left space-y-1.5">
-                  <p className="text-[10px] text-slate-500 flex justify-between">
-                    <span>Date Started:</span>
-                    <span className="font-medium text-slate-700">{formatDate(selectedAssessment.dateStarted) || selectedAssessment.dateStarted}</span>
-                  </p>
-                  {selectedAssessment.dateCompleted && (
-                    <p className="text-[10px] text-slate-500 flex justify-between">
-                      <span>Date Completed:</span>
-                      <span className="font-medium text-slate-700">{formatDate(selectedAssessment.dateCompleted)}</span>
-                    </p>
-                  )}
-                  <p className="text-[10px] text-slate-500 flex justify-between">
-                    <span>Safety Threshold:</span>
-                    <span className="font-medium text-slate-700">{selectedAssessment.safetyThreshold || 'Not set'}</span>
-                  </p>
-                  <p className="text-[10px] text-slate-500 flex justify-between">
-                    <span>Status:</span>
-                    <span className={`font-medium ${selectedAssessment.isCompleted ? 'text-emerald-600' : 'text-amber-600'}`}>
-                      {selectedAssessment.isCompleted ? 'Completed' : 'Pending'}
-                    </span>
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="flex justify-end gap-3 px-6 py-4 bg-slate-50/50 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={closeModal}
-                className="px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all duration-150 active:scale-95"
+                className="w-full py-2 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition active:scale-98"
               >
                 Cancel
               </button>
-              <button
-                type="button"
-                onClick={confirmDelete}
-                className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-rose-600 to-rose-700 rounded-xl hover:from-rose-700 hover:to-rose-800 shadow-md shadow-rose-600/20 transition-all duration-150 active:scale-95"
+              <button 
+                type="button" 
+                onClick={confirmDelete} 
+                className="w-full py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-xs transition active:scale-98"
               >
-                Delete Assessment
+                Delete
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Clear Database Modal - Professional */}
+      {/* Clear Database Modal */}
       {modalType === 'clear_db' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={closeModal} />
+          <div className="fixed inset-0 bg-slate-900/50 " onClick={closeModal} />
           <div className="relative bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden transform transition-all duration-200">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-red-50 to-white">
               <div className="flex items-center gap-3">
@@ -542,13 +487,9 @@ export const ThreatAssessmentPage: React.FC = () => {
                 <AlertTriangle size={28} className="text-red-500" />
               </div>
               <h4 className="text-lg font-bold text-slate-900 mb-2">Clear Entire Database?</h4>
-              <p className="text-sm text-slate-500 mb-4">
-                This action will permanently delete all threat assessments from the database.
-              </p>
+              <p className="text-sm text-slate-500 mb-4">This action will permanently delete all threat assessments from the database.</p>
               <div className="bg-red-50 border border-red-100 rounded-xl p-3">
-                <p className="text-[11px] font-medium text-red-700">
-                  ⚠️ This action cannot be undone. All data will be lost.
-                </p>
+                <p className="text-[11px] font-medium text-red-700">⚠️ This action cannot be undone. All data will be lost.</p>
               </div>
             </div>
             <div className="flex justify-end gap-3 px-6 py-4 bg-slate-50/50 border-t border-slate-100">
@@ -559,31 +500,24 @@ export const ThreatAssessmentPage: React.FC = () => {
         </div>
       )}
 
-      {/* Push Success Modal - Professional */}
+      {/* Push Success Modal */}
       {modalType === 'push_success' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={closeModal} />
+          <div className="fixed inset-0 bg-slate-900/50 " onClick={closeModal} />
           <div className="relative bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden transform transition-all duration-200">
             <div className="px-6 py-5 text-center">
               <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-4">
                 <CheckCircle2 size={32} className="text-emerald-500" />
               </div>
               <h4 className="text-lg font-bold text-slate-900 mb-2">Sync Successful!</h4>
-              <p className="text-sm text-slate-500">
-                Your secure threat assessment logs have been synced with the cloud repository.
-              </p>
-              <button 
-                onClick={closeModal} 
-                className="mt-5 w-full px-4 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-emerald-600 to-emerald-700 rounded-xl hover:from-emerald-700 hover:to-emerald-800 shadow-md transition-all duration-150"
-              >
-                Continue
-              </button>
+              <p className="text-sm text-slate-500">Your secure threat assessment logs have been synced with the cloud repository.</p>
+              <button onClick={closeModal} className="mt-5 w-full px-4 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-emerald-600 to-emerald-700 rounded-xl shadow-md">Continue</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Offline Push Alert Modal - Professional */}
+      {/* Offline Push Alert Modal */}
       {modalType === 'offline' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={closeModal} />
@@ -593,15 +527,8 @@ export const ThreatAssessmentPage: React.FC = () => {
                 <WifiOff size={32} className="text-amber-500" />
               </div>
               <h4 className="text-lg font-bold text-slate-900 mb-2">No Internet Connection</h4>
-              <p className="text-sm text-slate-500 mb-4">
-                Please connect to WiFi or mobile data to sync your data to the cloud.
-              </p>
-              <button 
-                onClick={closeModal} 
-                className="w-full px-4 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-slate-700 to-slate-800 rounded-xl hover:from-slate-800 hover:to-slate-900 shadow-md transition-all duration-150"
-              >
-                Got it
-              </button>
+              <p className="text-sm text-slate-500 mb-4">Please connect to WiFi or mobile data to sync your data to the cloud.</p>
+              <button onClick={closeModal} className="w-full px-4 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-slate-700 to-slate-800 rounded-xl shadow-md">Got it</button>
             </div>
           </div>
         </div>

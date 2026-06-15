@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, ShieldCheck, Check, Save, X, FileText, List, Plus, Edit2, Eye, Trash2, CloudLightning, ChevronDown } from 'lucide-react';
+import { Calendar, Clock, ShieldCheck, Check, Save, X, FileText, List, Plus, Edit2, Eye, Trash2, CloudLightning, ChevronDown, Hash, User } from 'lucide-react';
 import type { HomeStudyAssessmentData } from '../types/homeStudy';
 import { homeStudyService } from '../services/homeStudyService';
 
@@ -19,6 +19,7 @@ const TIME_OPTIONS = (() => {
 const INITIAL_FORM_STATE: HomeStudyAssessmentData = {
   assessmentDate: new Date().toISOString().split('T')[0],
   assessmentTime: '10:00 AM',
+  caseNumber: '',
   caregiverId: '',
   caregiverName: '',
   contacts: '',
@@ -111,17 +112,14 @@ const FcHomeStudyAssessment: React.FC = () => {
   }, []);
 
   const updateField = (name: keyof HomeStudyAssessmentData, value: any) => {
-    // যদি অলরেডি কমপ্লিট হয়ে লক থাকে, তবে কোনো চেঞ্জ করতে দেবে না
     if (formData.isCompleted && name !== 'isCompleted') return; 
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  // সেভ এবং আপডেট হ্যান্ডলার
   const handleSubmit = async (e?: React.FormEvent, updatedData?: HomeStudyAssessmentData) => {
     if (e) e.preventDefault();
     const dataToSave = updatedData || formData;
 
-    // ভ্যালিডেশন: কেয়ারগিভার নাম ছাড়া সেভ হবে না
     if (!dataToSave.caregiverName) {
       alert('❌ Caregiver Name is required!');
       return;
@@ -143,17 +141,12 @@ const FcHomeStudyAssessment: React.FC = () => {
     }
   };
 
-  // চেকবক্স এ ক্লিক করলে সরাসরি সেভ বা লক করার ফাংশন
   const handleToggleComplete = async () => {
-    if (formData.isCompleted) return; // অলরেডি কমপ্লিট থাকলে আর আনলক করার দরকার নেই
+    if (formData.isCompleted) return;
 
     if (window.confirm('Are you sure you want to mark this assessment as completed? This will lock the record permanently.')) {
       const updatedState = { ...formData, isCompleted: true };
-      
-      // লোকাল স্টেট সাথে সাথে আপডেট করছি যেন UI-তে ডিসেবল দেখা যায়
       setFormData(updatedState); 
-      
-      // ডেটাবেজে সরাসরি পুশ বা আপডেট করে দিচ্ছি
       await handleSubmit(undefined, updatedState);
     }
   };
@@ -273,9 +266,9 @@ const FcHomeStudyAssessment: React.FC = () => {
         </div>
       </div>
 
-      {/* --- LIST VIEW --- */}
+      {/* --- LIST VIEW (UPDATED TO DATA TABLE) --- */}
       {viewMode === 'list' && (
-        <div className="bg-white rounded-2xl border border-slate-200/70 shadow-xs overflow-hidden">
+        <div className="bg-white rounded-2xl border border-slate-200/70 shadow-2xs overflow-hidden">
           <div className="p-4 bg-slate-50/70 border-b border-slate-200/60 font-bold text-xs text-slate-500 uppercase tracking-wider">
             Saved Offline Records ({assessmentsList.length})
           </div>
@@ -284,57 +277,101 @@ const FcHomeStudyAssessment: React.FC = () => {
               No home study assessments saved yet. Click "Add New" to begin.
             </div>
           ) : (
-            <div className="divide-y divide-slate-100">
-              {assessmentsList.map((item) => (
-                <div key={item.id} className="p-4 sm:p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:bg-slate-50/50 transition-all">
-                  <div className="space-y-1">
-                    <div className="font-bold text-slate-900 text-sm">{item.caregiverName || 'Not Specified'}</div>
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 font-medium">
-                      <span className="flex items-center gap-1"><Calendar size={12}/> {item.assessmentDate}</span>
-                      <span className="flex items-center gap-1"><Clock size={12}/> {item.assessmentTime}</span>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                    {item.isCompleted ? (
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] font-bold tracking-wide bg-emerald-50 text-emerald-700 border border-emerald-100">
-                        <ShieldCheck size={12} className="mr-1"/> Locked
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] font-bold tracking-wide bg-purple-50 text-purple-700 border border-purple-100">
-                        <Edit2 size={12} className="mr-1"/> Draft
-                      </span>
-                    )}
-                    
-                    <button
-                      type="button"
-                      onClick={(e) => handlePushSingleData(item, e)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-blue-50/60 hover:bg-blue-50 border border-blue-200 text-blue-600 rounded-xl text-[11px] font-semibold shadow-2xs transition-all duration-150 active:scale-95 cursor-pointer"
-                    >
-                      <CloudLightning size={12} className="opacity-90" />
-                      <span>Push</span>
-                    </button>
+            <div className="w-full overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50/70 border-b border-slate-200/60 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                    <th className="py-3 px-4 sm:px-5">Caregiver Name</th>
+                    <th className="py-3 px-4">Case Number</th>
+                    <th className="py-3 px-4">Assessment Date & Time</th>
+                    <th className="py-3 px-4 text-center">Status</th>
+                    <th className="py-3 px-4 text-right sm:pr-5">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-sm">
+                  {assessmentsList.map((item) => (
+                    <tr key={item.id} className="hover:bg-slate-50/40 transition-all">
+                      {/* Caregiver Name */}
+                      <td className="py-3.5 px-4 sm:px-5 font-bold text-slate-900">
+                        <div className="flex items-center gap-2">
+                          <User size={14} className="text-slate-400 shrink-0" />
+                          <span>{item.caregiverName || 'Not Specified'}</span>
+                        </div>
+                      </td>
+                      
+                      {/* Case Number */}
+                      <td className="py-3.5 px-4 font-semibold text-slate-600">
+                        {item.caseNumber ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md text-xs font-mono">
+                            {item.caseNumber}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 text-xs italic">N/A</span>
+                        )}
+                      </td>
 
-                    <button
-                      type="button"
-                      onClick={() => handleEdit(item)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 hover:text-blue-600 rounded-xl text-[11px] font-semibold shadow-2xs transition-all duration-150 active:scale-95 cursor-pointer"
-                    >
-                      {item.isCompleted ? <Eye size={12} className="opacity-80"/> : <Edit2 size={12} className="opacity-80" />}
-                      <span>{item.isCompleted ? 'View' : 'Edit'}</span>
-                    </button>
+                      {/* Date & Time */}
+                      <td className="py-3.5 px-4 text-xs text-slate-500 font-medium">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="flex items-center gap-1 text-slate-700 font-semibold">
+                            <Calendar size={12} className="text-slate-400" /> {item.assessmentDate}
+                          </span>
+                          <span className="flex items-center gap-1 text-slate-400">
+                            <Clock size={12} /> {item.assessmentTime}
+                          </span>
+                        </div>
+                      </td>
 
-                    <button
-                      type="button"
-                      onClick={(e) => item.id && handleDelete(item.id, e)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white hover:bg-red-50 border border-slate-200 hover:border-red-200 text-slate-500 hover:text-red-600 rounded-xl text-[11px] font-semibold shadow-2xs transition-all duration-150 active:scale-95 cursor-pointer"
-                    >
-                      <Trash2 size={12} className="opacity-80" />
-                      <span>Remove</span>
-                    </button>
-                  </div>
-                </div>
-              ))}
+                      {/* Status */}
+                      <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                        {item.isCompleted ? (
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] font-bold tracking-wide bg-emerald-50 text-emerald-700 border border-emerald-100">
+                            <ShieldCheck size={12} className="mr-1 shrink-0"/> Locked
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] font-bold tracking-wide bg-purple-50 text-purple-700 border border-purple-100">
+                            <Edit2 size={11} className="mr-1 shrink-0"/> Draft
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Action Buttons */}
+                      <td className="py-3.5 px-4 text-right whitespace-nowrap sm:pr-5">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={(e) => handlePushSingleData(item, e)}
+                            className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50/60 hover:bg-blue-50 border border-blue-200 text-blue-600 rounded-lg text-xs font-semibold shadow-3xs transition cursor-pointer"
+                            title="Push data to server"
+                          >
+                            <CloudLightning size={12} />
+                            <span className="hidden md:inline">Push</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleEdit(item)}
+                            className="inline-flex items-center gap-1 px-2 py-1 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 hover:text-blue-600 rounded-lg text-xs font-semibold shadow-3xs transition cursor-pointer"
+                            title={item.isCompleted ? 'View details' : 'Edit assessment'}
+                          >
+                            {item.isCompleted ? <Eye size={12} /> : <Edit2 size={12} />}
+                            <span className="hidden md:inline">{item.isCompleted ? 'View' : 'Edit'}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={(e) => item.id && handleDelete(item.id, e)}
+                            className="inline-flex items-center justify-center p-1 bg-white hover:bg-red-50 border border-slate-200 hover:border-red-200 text-slate-400 hover:text-red-600 rounded-lg shadow-3xs transition cursor-pointer"
+                            title="Delete record"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
@@ -350,6 +387,7 @@ const FcHomeStudyAssessment: React.FC = () => {
 
           {/* Basic Meta Fields */}
           <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/70 shadow-2xs grid grid-cols-1 md:grid-cols-4 gap-5">
+            {/* Assessment Date */}
             <div>
               <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                 <Calendar size={13} className="text-slate-400" /> Assessment Date *
@@ -364,6 +402,7 @@ const FcHomeStudyAssessment: React.FC = () => {
               />
             </div>
 
+            {/* Assessment Time */}
             <div className="relative">
               <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                 <Clock size={13} className="text-slate-400" /> Assessment Time *
@@ -394,7 +433,23 @@ const FcHomeStudyAssessment: React.FC = () => {
               )}
             </div>
 
-            <div className="md:col-span-2">
+            {/* Case Number */}
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <Hash size={13} className="text-slate-400" /> Case Number
+              </label>
+              <input
+                type="text"
+                value={formData.caseNumber || ''}
+                onChange={(e) => updateField('caseNumber', e.target.value)}
+                disabled={isReadOnly}
+                placeholder="e.g. CS-9872"
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl bg-white disabled:bg-slate-50 disabled:text-slate-400 focus:outline-none focus:border-blue-500 transition font-medium text-slate-700"
+              />
+            </div>
+
+            {/* Caregiver Name */}
+            <div>
               <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">
                 Caregiver Name *
               </label>
@@ -405,7 +460,7 @@ const FcHomeStudyAssessment: React.FC = () => {
                 disabled={isReadOnly}
                 required
                 placeholder="Enter Caregiver Name"
-                className="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl bg-white disabled:bg-slate-50 disabled:text-slate-400 focus:outline-none focus:border-blue-500 transition font-medium text-slate-700"
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl bg-white disabled:bg-slate-50 disabled:text-slate-400 focus:outline-none focus:border-blue-500 transition font-medium text-slate-700"
               />
             </div>
           </div>

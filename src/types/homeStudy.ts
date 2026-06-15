@@ -8,7 +8,7 @@ export interface HomeStudyAssessmentData {
   sourceOfReferral: string;
   directionsToHome: string;
   motivationForTakingChild: string;
-  
+  caseNumber: string;
   // Family History
   bornAndRaised: string;
   parentsDetails: string;

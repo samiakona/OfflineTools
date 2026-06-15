@@ -1,6 +1,7 @@
 import Dexie, { type Table } from 'dexie';
 import type { CaseNote } from '../types/caseNote';
 import type { AssessmentFormData } from '../types/assessment';
+import type { VisitNotesData } from '../types/visitNotes';
 
 export interface ThreatAssessment {
   id?: number;
@@ -28,14 +29,18 @@ export class HemaiyaOfflineDatabase extends Dexie {
   caseNotes!: Table<CaseNote>;
   assessments!: Table<AssessmentRecord>;
   threatAssessments!: Table<ThreatAssessment>;
+  visitNotes!: Table<VisitNotesData>; // Visit Notes টেবিল
 
   constructor() {
     super('HemaiyaOfflineDB');
-    this.version(4).stores({
+    
+    // ভার্সন কন্ট্রোল এবং টেবিল স্কিমা ডেফিনিশন
+    this.version(5).stores({
       caseNotes: '++id, date, serviceType, caseName, childName, createdAt',
       assessments: '++id, name, dateStarted, isCompleted',
       threatAssessments: '++id, dateStarted, dateCompleted, safetyThreshold, isCompleted, createdAt, updatedAt',
-      homeStudyAssessments: '++id, caregiverId, assessmentDate, isCompleted'
+      homeStudyAssessments: '++id, caregiverId, assessmentDate, isCompleted',
+      visitNotes: '++id, date, caseNumber, children, isCompleted' 
     });
   }
 }

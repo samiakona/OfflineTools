@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { 
   ArrowLeft, Calendar, ShieldCheck, AlertTriangle, 
-  FileText, Check, Lock, HelpCircle, Edit2 
+  FileText, Check, Lock, HelpCircle, Edit2, Hash 
 } from 'lucide-react';
 import { CustomSelect } from '../components/Common/CustomSelect';
 import { threatAssessmentService } from '../services/threatAssessmentService';
@@ -10,6 +10,7 @@ import { threatAssessmentService } from '../services/threatAssessmentService';
 interface ThreatAssessmentFormData {
   dateStarted: string;
   dateCompleted: string;
+  caseNumber: string; // নতুন যুক্ত করা হয়েছে
   presentDanger: string[];
   presentDangerComments: string;
   impendingDanger: string[];
@@ -30,6 +31,7 @@ export const ThreatAssessmentFormPage: React.FC = () => {
   const [formData, setFormData] = useState<ThreatAssessmentFormData>({
     dateStarted: new Date().toISOString().split('T')[0],
     dateCompleted: '',
+    caseNumber: '', // নতুন যুক্ত করা হয়েছে
     presentDanger: [],
     presentDangerComments: '',
     impendingDanger: [],
@@ -54,6 +56,7 @@ export const ThreatAssessmentFormPage: React.FC = () => {
             const loadedData = {
               dateStarted: record.dateStarted ?? '',
               dateCompleted: record.dateCompleted ?? '',
+              caseNumber: record.caseNumber ?? '', // নতুন যুক্ত করা হয়েছে
               presentDanger: record.presentDanger ?? [],
               presentDangerComments: record.presentDangerComments ?? '',
               impendingDanger: record.impendingDanger ?? [],
@@ -101,13 +104,7 @@ export const ThreatAssessmentFormPage: React.FC = () => {
     
     setIsSaving(true);
     try {
-      // IMPORTANT: Save exactly what's in form, don't clear dateCompleted
       let dataToSave = { ...formData };
-      
-      // Only clear dateCompleted if NOT completed AND user never set it
-      // But if user manually set dateCompleted, keep it even if not completed
-      // So we don't clear dateCompleted at all - let user decide
-      
       console.log('Data to save:', dataToSave);
 
       if (isEditMode && id) {
@@ -158,7 +155,6 @@ export const ThreatAssessmentFormPage: React.FC = () => {
       try {
         await threatAssessmentService.updateAssessment(Number(id), {
           isCompleted: false,
-          // Keep the dateCompleted, don't clear it
         });
         
         const record = await threatAssessmentService.getAssessmentById(Number(id));
@@ -166,6 +162,7 @@ export const ThreatAssessmentFormPage: React.FC = () => {
           setFormData({
             dateStarted: record.dateStarted ?? '',
             dateCompleted: record.dateCompleted ?? '',
+            caseNumber: record.caseNumber ?? '', // নতুন যুক্ত করা হয়েছে
             presentDanger: record.presentDanger ?? [],
             presentDangerComments: record.presentDangerComments ?? '',
             impendingDanger: record.impendingDanger ?? [],
@@ -185,8 +182,6 @@ export const ThreatAssessmentFormPage: React.FC = () => {
       }
     }
   };
-
-  // ... rest of your arrays (presentDangerCategories, impendingDangerItems, alternativeInterventionItems) remain the same ...
 
   const presentDangerCategories = [
     { cat: "General", items: ["Severe, extreme maltreatment suspected, observed or confirmed", "Child has multiple or different kinds of injuries", "Child has injuries to face or head", "Maltreatment demonstrates bizarre cruelty", "Maltreatment of several victims suspected, observed or confirmed", "Maltreatment appears premeditated", "Dangerous (life threatening) living arrangements", "Current report represents a serious threat and there is a history of referrals", "Child is accessible to person alleged to have maltreated the child"] },
@@ -263,45 +258,61 @@ export const ThreatAssessmentFormPage: React.FC = () => {
 
       <form onSubmit={handleSubmit} className="bg-slate-50/60 rounded-2xl p-2 sm:p-4 space-y-6">
         
-        {/* Date Section */}
-        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/70 shadow-xs grid grid-cols-1 md:grid-cols-2 gap-5">
-          <div>
-            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <Calendar size={13} className="text-slate-400" /> Date Threat Assessment Started *
-            </label>
-            <input 
-              type="date" 
-              value={formData.dateStarted} 
-              onChange={(e) => updateField('dateStarted', e.target.value)} 
-              disabled={isReadOnly}
-              required
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl bg-white disabled:bg-slate-100/80 disabled:text-slate-400 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 font-medium transition shadow-2xs text-slate-700"
-            />
-          </div>
-          <div>
-            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <Calendar size={13} className="text-slate-400" /> Date Threat Assessment Completed
-            </label>
-            <input 
-              type="date" 
-              value={formData.dateCompleted} 
-              onChange={(e) => updateField('dateCompleted', e.target.value)}
-              disabled={isReadOnly}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl bg-white disabled:bg-slate-100/80 disabled:text-slate-400 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 font-medium transition shadow-2xs text-slate-700"
-            />
-            {formData.dateCompleted && (
-              <p className="text-[10px] text-blue-500 mt-1 flex items-center gap-1">
-                <Calendar size={10} /> Selected: {formData.dateCompleted}
-              </p>
-            )}
-            {formData.isCompleted && (
-              <p className="text-[10px] text-emerald-600 mt-1 flex items-center gap-1">
-                <Check size={10} /> Assessment will be locked when saved
-              </p>
-            )}
-          </div>
-        </div>
-
+        {/* Date & Case Number Section */}
+        {/* এখানে grid-cols-1 md:grid-cols-2 কে md:grid-cols-3 এ পরিবর্তন করা হয়েছে ৩টি ফিল্ড পাশাপাশি দেখানোর জন্য */}
+    {/* Date & Case Number Section */}
+<div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/70 shadow-xs grid grid-cols-1 md:grid-cols-3 gap-5">
+  <div>
+    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+      <Calendar size={13} className="text-slate-400" /> Date Threat Assessment Started *
+    </label>
+    <input 
+      type="date" 
+      value={formData.dateStarted} 
+      onChange={(e) => updateField('dateStarted', e.target.value)} 
+      disabled={isReadOnly}
+      required
+      className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl bg-white disabled:bg-slate-100/80 disabled:text-slate-400 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 font-medium transition shadow-2xs text-slate-700"
+    />
+  </div>
+  <div>
+    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+      <Calendar size={13} className="text-slate-400" /> Date Threat Assessment Completed
+    </label>
+    <input 
+      type="date" 
+      value={formData.dateCompleted} 
+      onChange={(e) => updateField('dateCompleted', e.target.value)}
+      disabled={isReadOnly}
+      className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl bg-white disabled:bg-slate-100/80 disabled:text-slate-400 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 font-medium transition shadow-2xs text-slate-700"
+    />
+    {formData.dateCompleted && (
+      <p className="text-[10px] text-blue-500 mt-1 flex items-center gap-1">
+        <Calendar size={10} /> Selected: {formData.dateCompleted}
+      </p>
+    )}
+    {formData.isCompleted && (
+      <p className="text-[10px] text-emerald-600 mt-1 flex items-center gap-1">
+        <Check size={10} /> Assessment will be locked when saved
+      </p>
+    )}
+  </div>
+  
+  {/* এই নতুন ৩ নম্বর কলামটি যোগ করার পর আপনার ফাইলে আর কোনো সমস্যা থাকবে না */}
+  <div>
+    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+      <Hash size={13} className="text-slate-400" /> Case Number
+    </label>
+    <input 
+      type="text" 
+      placeholder="Enter case number"
+      value={formData.caseNumber} 
+      onChange={(e) => updateField('caseNumber', e.target.value)}
+      disabled={isReadOnly}
+      className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl bg-white disabled:bg-slate-100/80 disabled:text-slate-400 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 font-medium transition shadow-2xs text-slate-700"
+    />
+  </div>
+</div>
         {/* Rest of your form sections remain the same */}
         {/* Present Danger Section */}
         <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/70 shadow-xs space-y-5">

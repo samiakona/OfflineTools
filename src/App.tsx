@@ -10,6 +10,7 @@ import {ThreatAssessmentPage} from './pages/ThreatAssessmentPage';
 import {ThreatAssessmentFormPage}   from './pages/ThreatAssessmentFormPage';
 import { AssessmentFormPage } from './pages/AssessmentFormPage';
 import FcHomeStudyAssessment from './pages/FcHomeStudyAssessment';
+import FcVisitNotes from './pages/FcVisitNotes';
 
 const App: React.FC = () => {
   return (
@@ -27,6 +28,7 @@ const App: React.FC = () => {
           <Route path="/add-threat/:id" element={<ThreatAssessmentFormPage />} />
           <Route path="/threat-assessment/:id" element={<ThreatAssessmentFormPage />} />
           <Route path="/home-study-assessment" element={<FcHomeStudyAssessment />} />
+          <Route path="/fc-visit-notes" element={<FcVisitNotes />} />
         </Routes>
       </DashboardLayout>
     </HashRouter>

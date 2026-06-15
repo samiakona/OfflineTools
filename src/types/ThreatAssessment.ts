@@ -12,4 +12,5 @@ export interface ThreatAssessment {
   isCompleted: boolean;
   createdAt: string;
   updatedAt: string;
+  caseNumber: string;
 }

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   ClipboardList, Plus, Edit2, Trash2, 
   AlertTriangle, ShieldCheck, ShieldAlert, Calendar, Search, X,
-  Zap, CloudLightning, WifiOff, CheckCircle2
+  Zap, CloudLightning, WifiOff, CheckCircle2, Hash
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { assessmentService } from '../services/assessmentService'; 
@@ -92,18 +92,20 @@ export const AssessmentsPage: React.FC = () => {
     }
   };
 
-  // 🔍 সার্চ ফিল্টারিং লজিক
+  // 🔍 সার্চ ফিল্টারিং লজিক (সবগুলো আলাদা ফিল্ড ট্র্যাক করবে)
   const filteredAssessments = assessments.filter(item => {
     const query = searchQuery.toLowerCase();
     
-    const currentCaseIdentifier = item.caseName || item.name || '';
-    const matchesCase = currentCaseIdentifier.toLowerCase().includes(query);
-    const matchesName = item.name?.toLowerCase().includes(query);
+    const matchesCaseName = (item.caseName || '').toLowerCase().includes(query);
+    const matchesName = (item.name || '').toLowerCase().includes(query);
+    
+    const typedItem = item as AssessmentRecord & { caseNumber?: string };
+    const matchesCaseNumber = (typedItem.caseNumber || '').toLowerCase().includes(query);
     
     const childStatus = item.childIsSafe === 'Yes' ? 'safe' : 'at risk';
     const matchesStatus = childStatus.includes(query);
 
-    return matchesCase || matchesName || matchesStatus;
+    return matchesCaseName || matchesName || matchesCaseNumber || matchesStatus;
   });
 
   // মোডালের ডিসপ্লে নামের জন্য সেফটি ফলব্যাক
@@ -166,7 +168,7 @@ export const AssessmentsPage: React.FC = () => {
             type="text" 
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)} 
-            placeholder="Filter by case, name or status..." 
+            placeholder="Filter by name, case number or status..." 
             className="w-full pl-9 pr-4 py-2 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-blue-500 font-medium transition"
           />
         </div>
@@ -181,7 +183,8 @@ export const AssessmentsPage: React.FC = () => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200/80">
-                <th className="p-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Case / Identifier</th>
+              
+                <th className="p-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Case Number</th>
                 <th className="p-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Date Started</th>
                 <th className="p-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center">Home Concerns</th>
                 <th className="p-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center">Physical Status</th>
@@ -193,126 +196,128 @@ export const AssessmentsPage: React.FC = () => {
             <tbody className="divide-y divide-slate-100">
               {isLoading ? (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-slate-400 text-xs font-medium">
+                  <td colSpan={8} className="p-8 text-center text-slate-400 text-xs font-medium">
                     Loading assessments from offline database...
                   </td>
                 </tr>
               ) : filteredAssessments.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-slate-400 text-xs font-medium italic">
+                  <td colSpan={8} className="p-8 text-center text-slate-400 text-xs font-medium italic">
                     No assessments recorded in this block.
                   </td>
                 </tr>
               ) : (
-                filteredAssessments.map((item) => (
-                  <tr key={item.id} className="hover:bg-slate-50/40 transition-colors group">
+                filteredAssessments.map((item) => {
+                  const typedItem = item as AssessmentRecord & { caseNumber?: string };
+                  
+                  return (
+                    <tr key={item.id} className="hover:bg-slate-50/40 transition-colors group">
+                      
                     
-                    {/* Case Name / Identifier */}
-                    <td className="p-4 whitespace-nowrap">
-                      <div className="flex items-center gap-2.5">
-                        <div className="p-2 bg-slate-50 rounded-lg text-slate-500 group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors">
-                          <ClipboardList size={15} />
+                  
+
+                      {/* 🔢 Case Number Field (আলাদা কলাম) */}
+                      <td className="p-4 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5 text-xs text-slate-600 font-semibold">
+                          <Hash size={13} className="text-slate-400" />
+                          <span>{typedItem.caseNumber || 'N/A'}</span>
                         </div>
-                        <span className="text-xs font-bold text-slate-900">
-                          {item.caseName || item.name || 'N/A'}
+                      </td>
+
+                      {/* Date Started */}
+                      <td className="p-4 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
+                          <Calendar size={13} className="text-slate-400" />
+                          {item.dateStarted}
+                        </div>
+                      </td>
+
+                      {/* Home Concerns Badge */}
+                      <td className="p-4 whitespace-nowrap text-center">
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold border ${
+                          item.hasHomeConcerns === 'Yes' ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-slate-50 border-slate-200 text-slate-600'
+                        }`}>
+                          {item.hasHomeConcerns === 'Yes' && <AlertTriangle size={11} />}
+                          {item.hasHomeConcerns}
                         </span>
-                      </div>
-                    </td>
+                      </td>
 
-                    {/* Date Started */}
-                    <td className="p-4 whitespace-nowrap">
-                      <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
-                        <Calendar size={13} className="text-slate-400" />
-                        {item.dateStarted}
-                      </div>
-                    </td>
+                      {/* Physical Status Concerns Badge */}
+                      <td className="p-4 whitespace-nowrap text-center">
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold border ${
+                          item.hasPhysicalConcerns === 'Yes' ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-slate-50 border-slate-200 text-slate-600'
+                        }`}>
+                          {item.hasPhysicalConcerns === 'Yes' && <AlertTriangle size={11} />}
+                          {item.hasPhysicalConcerns}
+                        </span>
+                      </td>
 
-                    {/* Home Concerns Badge */}
-                    <td className="p-4 whitespace-nowrap text-center">
-                      <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold border ${
-                        item.hasHomeConcerns === 'Yes' ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-slate-50 border-slate-200 text-slate-600'
-                      }`}>
-                        {item.hasHomeConcerns === 'Yes' && <AlertTriangle size={11} />}
-                        {item.hasHomeConcerns}
-                      </span>
-                    </td>
+                      {/* Child Is Safe Visual Status */}
+                      <td className="p-4 whitespace-nowrap text-center">
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black tracking-wide uppercase border ${
+                          item.childIsSafe === 'Yes' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-rose-100 border-rose-300 text-rose-800 animate-pulse'
+                        }`}>
+                          {item.childIsSafe === 'Yes' ? <ShieldCheck size={12} /> : <ShieldAlert size={12} />}
+                          {item.childIsSafe === 'Yes' ? 'Safe' : 'At Risk'}
+                        </span>
+                      </td>
 
-                    {/* Physical Status Concerns Badge */}
-                    <td className="p-4 whitespace-nowrap text-center">
-                      <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold border ${
-                        item.hasPhysicalConcerns === 'Yes' ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-slate-50 border-slate-200 text-slate-600'
-                      }`}>
-                        {item.hasPhysicalConcerns === 'Yes' && <AlertTriangle size={11} />}
-                        {item.hasPhysicalConcerns}
-                      </span>
-                    </td>
+                      {/* Date Completed */}
+                      <td className="p-4 whitespace-nowrap">
+                        <span className={`text-xs font-semibold ${!item.dateCompleted || item.dateCompleted === 'Pending' ? 'text-amber-500 italic font-medium' : 'text-slate-600'}`}>
+                          {item.dateCompleted || 'Pending'}
+                        </span>
+                      </td>
 
-                    {/* Child Is Safe Visual Status */}
-                    <td className="p-4 whitespace-nowrap text-center">
-                      <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black tracking-wide uppercase border ${
-                        item.childIsSafe === 'Yes' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-rose-100 border-rose-300 text-rose-800 animate-pulse'
-                      }`}>
-                        {item.childIsSafe === 'Yes' ? <ShieldCheck size={12} /> : <ShieldAlert size={12} />}
-                        {item.childIsSafe === 'Yes' ? 'Safe' : 'At Risk'}
-                      </span>
-                    </td>
+                      {/* 🛠️ টেবিলের ভেতরের অ্যাকশন বাটনসমূহ */}
+                      <td className="p-4 whitespace-nowrap text-center">
+                        <div className="flex items-center justify-center gap-1.5">
+                          
+                          {/* Push Button */}
+                          <button
+                            type="button"
+                            onClick={() => setModalType('offline')}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-50/60 hover:bg-blue-50 border border-blue-200 text-blue-600 rounded-xl text-[11px] font-bold shadow-2xs transition-all duration-150 active:scale-95 cursor-pointer"
+                            title="Push data to server"
+                          >
+                            <CloudLightning size={12} className="opacity-90" />
+                            <span>Push</span>
+                          </button>
 
-                    {/* Date Completed */}
-                    <td className="p-4 whitespace-nowrap">
-                      <span className={`text-xs font-semibold ${!item.dateCompleted || item.dateCompleted === 'Pending' ? 'text-amber-500 italic font-medium' : 'text-slate-600'}`}>
-                        {item.dateCompleted || 'Pending'}
-                      </span>
-                    </td>
+                          {/* Edit Button */}
+                          <button 
+                            type="button"
+                            onClick={() => item.id && handleEdit(item.id)} 
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-xl border border-slate-200 bg-white transition shadow-3xs cursor-pointer text-[11px] font-bold"
+                            title="Edit Assessment"
+                          >
+                            <Edit2 size={12} className="text-slate-400 group-hover:text-blue-500" />
+                            <span>Edit</span>
+                          </button>
 
-                    {/* 🛠️ টেবিলের ভেতরের অ্যাকশন বাটনসমূহ */}
-                  {/* 🛠️ টেবিলের ভেতরের অ্যাকশন বাটনসমূহ */}
-<td className="p-4 whitespace-nowrap text-center">
-  <div className="flex items-center justify-center gap-1.5">
-    
-    {/* Push Button */}
-    <button
-      type="button"
-      onClick={() => setModalType('offline')}
-      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-50/60 hover:bg-blue-50 border border-blue-200 text-blue-600 rounded-xl text-[11px] font-bold shadow-2xs transition-all duration-150 active:scale-95 cursor-pointer"
-      title="Push data to server"
-    >
-      <CloudLightning size={12} className="opacity-90" />
-      <span>Push</span>
-    </button>
+                          {/* Remove Button */}
+                          <button 
+                            type="button"
+                            onClick={() => item.id && openDeleteModal(item.id)} 
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-xl border border-rose-200 bg-white transition shadow-3xs cursor-pointer text-[11px] font-bold"
+                            title="Delete Record"
+                          >
+                            <Trash2 size={12} />
+                            <span>Remove</span>
+                          </button>
+                        </div>
+                      </td>
 
-    {/* Edit Button */}
-    <button 
-      type="button"
-      onClick={() => item.id && handleEdit(item.id)} 
-      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-xl border border-slate-200 bg-white transition shadow-3xs cursor-pointer text-[11px] font-bold"
-      title="Edit Assessment"
-    >
-      <Edit2 size={12} className="text-slate-400 group-hover:text-blue-500" />
-      <span>Edit</span>
-    </button>
-
-    {/* Remove Button */}
-    <button 
-      type="button"
-      onClick={() => item.id && openDeleteModal(item.id)} 
-      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-xl border border-rose-200 bg-white transition shadow-3xs cursor-pointer text-[11px] font-bold"
-      title="Delete Record"
-    >
-      <Trash2 size={12} />
-      <span>Remove</span>
-    </button>
-  </div>
-</td>
-
-                  </tr>
-                ))
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* 🚨 ১. আপনার অরিজিনাল ডিলিট কনফার্মেশন মোডাল */}
+      {/* 🚨 ১. ডিলিট কনফার্মেশন মোডাল */}
       {modalType === 'delete' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity" onClick={closeModal} />
