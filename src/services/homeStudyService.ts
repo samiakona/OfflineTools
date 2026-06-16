@@ -1,5 +1,5 @@
 
-import { db } from '../db/dexie';
+import { db } from '../hooks/dexie';
 import type { HomeStudyAssessmentData } from '../types/homeStudy';
 
 export const homeStudyService = {

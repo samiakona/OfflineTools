@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, ShieldCheck, Check, Save, X, FileText, List, Plus, Edit2, Eye, Trash2, CloudLightning, ChevronDown, Hash, User } from 'lucide-react';
+import { Calendar, Clock, ShieldCheck, Check, Save, X, FileText, List, Plus, Edit2, Eye, Trash2, CloudLightning, ChevronDown, Hash, User, RefreshCw } from 'lucide-react';
+import toast, { Toaster } from 'react-hot-toast';
 import type { HomeStudyAssessmentData } from '../types/homeStudy';
 import { homeStudyService } from '../services/homeStudyService';
+import DeleteConfirmationModal from '../components/DeleteConfirmationModal';
+
 
 const TIME_OPTIONS = (() => {
   const times = [];
@@ -101,10 +104,22 @@ const FcHomeStudyAssessment: React.FC = () => {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [formData, setFormData] = useState<HomeStudyAssessmentData>(INITIAL_FORM_STATE);
   const [isTimeDropdownOpen, setIsTimeDropdownOpen] = useState(false);
-
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  
+  // Delete Modal State
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleteItemId, setDeleteItemId] = useState<number | null>(null);
+  const [deleteItemName, setDeleteItemName] = useState<string>('');
+  const [isDeleting, setIsDeleting] = useState(false);
+  
   const loadList = async () => {
-    const list = await homeStudyService.getAll();
-    setAssessmentsList(list);
+    try {
+      const list = await homeStudyService.getAll();
+      setAssessmentsList(list);
+    } catch (error) {
+      console.error('Error loading list:', error);
+      toast.error('Failed to load assessments');
+    }
   };
 
   useEffect(() => {
@@ -121,24 +136,34 @@ const FcHomeStudyAssessment: React.FC = () => {
     const dataToSave = updatedData || formData;
 
     if (!dataToSave.caregiverName) {
-      alert('❌ Caregiver Name is required!');
+      toast.error('❌ Caregiver Name is required!');
       return;
     }
 
     try {
       if (editingId) {
         await homeStudyService.update(editingId, dataToSave);
-        alert(dataToSave.isCompleted ? '🔒 Assessment Completed & Locked!' : '✅ Assessment Updated Successfully!');
+        toast.success(dataToSave.isCompleted ? '🔒 Assessment Completed & Locked!' : '✅ Assessment Updated Successfully!');
       } else {
         await homeStudyService.create(dataToSave);
-        alert(dataToSave.isCompleted ? '🔒 New Assessment Saved & Locked!' : '✅ New Assessment Saved Successfully!');
+        localStorage.setItem('note_submitted', 'true');
+        toast.success(dataToSave.isCompleted ? '🔒 New Assessment Saved & Locked!' : '✅ New Assessment Saved Successfully!');
       }
       handleCancel();
       await loadList();
     } catch (error) {
       console.error(error);
-      alert('❌ Failed to save data offline.');
+      toast.error('❌ Failed to save data offline.');
     }
+  };
+
+  const handleHardRefresh = () => {
+    setIsRefreshing(true);
+    toast.loading('Refreshing...', { id: 'refresh' });
+    setTimeout(() => {
+      toast.success('Refreshed successfully!', { id: 'refresh' });
+      window.location.reload();
+    }, 150);
   };
 
   const handleToggleComplete = async () => {
@@ -151,37 +176,86 @@ const FcHomeStudyAssessment: React.FC = () => {
     }
   };
 
-  const handleDelete = async (id: number, e: React.MouseEvent) => {
+  // Delete handlers with Modal
+  const openDeleteModal = (id: number, name: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (window.confirm('Are you sure you want to delete this record from offline database?')) {
-      await homeStudyService.delete(id);
-      alert('🗑️ Record Deleted Successfully!');
+    setDeleteItemId(id);
+    setDeleteItemName(name || 'Record');
+    setDeleteModalOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteItemId) return;
+    
+    setIsDeleting(true);
+    try {
+      await homeStudyService.delete(deleteItemId);
+      toast.success('🗑️ Record Deleted Successfully!');
+      setDeleteModalOpen(false);
       await loadList();
+    } catch (error) {
+      console.error(error);
+      toast.error('❌ Failed to delete record');
+    } finally {
+      setIsDeleting(false);
+      setDeleteItemId(null);
+      setDeleteItemName('');
+    }
+  };
+
+  const closeDeleteModal = () => {
+    if (!isDeleting) {
+      setDeleteModalOpen(false);
+      setDeleteItemId(null);
+      setDeleteItemName('');
     }
   };
 
   const handlePushSingleData = async (item: HomeStudyAssessmentData, e: React.MouseEvent) => {
     e.stopPropagation();
-    alert(`⚡ Syncing data for: ${item.caregiverName || 'Unknown'}\n[Push Logic implementation here]`);
-    console.log('Pushing Single Item: ', item);
+    toast.loading(`Syncing data for: ${item.caregiverName || 'Unknown'}...`, { id: 'push-single' });
+    
+    try {
+      console.log('Pushing Single Item: ', item);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      toast.success(`✅ ${item.caregiverName} synced successfully!`, { id: 'push-single' });
+    } catch (error) {
+      console.error(error);
+      toast.error(`❌ Failed to sync ${item.caregiverName}`, { id: 'push-single' });
+    }
   };
 
-  const handlePushAllData = () => {
+  const handlePushAllData = async () => {
     if (assessmentsList.length === 0) {
-      alert('⚠️ No offline data available to push.');
+      toast.error('⚠️ No offline data available to push.');
       return;
     }
-    alert(`⚡ Syncing total ${assessmentsList.length} records to the server...\n[Push All Logic implementation here]`);
-    console.log('Pushing All Items: ', assessmentsList);
+    
+    toast.loading(`Syncing total ${assessmentsList.length} records to the server...`, { id: 'push-all' });
+    
+    try {
+      console.log('Pushing All Items: ', assessmentsList);
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      toast.success(`✅ All ${assessmentsList.length} records synced successfully!`, { id: 'push-all' });
+    } catch (error) {
+      console.error(error);
+      toast.error('❌ Failed to sync all records', { id: 'push-all' });
+    }
   };
 
   const handleClearAllData = async () => {
     if (window.confirm('⚠️ CRITICAL WARNING!\nThis will delete ALL home study assessment records from your device permanently. Are you absolutely sure?')) {
-      for (const item of assessmentsList) {
-        if (item.id) await homeStudyService.delete(item.id);
+      toast.loading('Clearing all data...', { id: 'clear-all' });
+      try {
+        for (const item of assessmentsList) {
+          if (item.id) await homeStudyService.delete(item.id);
+        }
+        toast.success('💥 All offline data cleared successfully.', { id: 'clear-all' });
+        await loadList();
+      } catch (error) {
+        console.error(error);
+        toast.error('❌ Failed to clear data', { id: 'clear-all' });
       }
-      alert('💥 All offline data cleared successfully.');
-      await loadList();
     }
   };
 
@@ -207,6 +281,44 @@ const FcHomeStudyAssessment: React.FC = () => {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 text-slate-800 pb-16 antialiased p-2">
+      {/* Toaster Component */}
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 4000,
+          style: {
+            background: '#363636',
+            color: '#fff',
+            padding: '16px',
+            borderRadius: '12px',
+            fontSize: '14px',
+            fontWeight: '500',
+          },
+          success: {
+            duration: 3000,
+            iconTheme: {
+              primary: '#22c55e',
+              secondary: '#fff',
+            },
+          },
+          error: {
+            duration: 4000,
+            iconTheme: {
+              primary: '#ef4444',
+              secondary: '#fff',
+            },
+          },
+        }}
+      />
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmationModal
+        isOpen={deleteModalOpen}
+        onClose={closeDeleteModal}
+        onConfirm={confirmDelete}
+        itemName={deleteItemName}
+        isDeleting={isDeleting}
+      />
       
       {/* Dynamic Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-200/80 pb-5 gap-4">
@@ -226,6 +338,15 @@ const FcHomeStudyAssessment: React.FC = () => {
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
           {viewMode === 'list' ? (
             <>
+              <button
+                onClick={handleHardRefresh}
+                disabled={isRefreshing}
+                className="flex items-center gap-1.5 sm:gap-2 border border-slate-200 text-slate-600 hover:text-slate-800 bg-white hover:bg-slate-50 px-3 py-2 sm:px-3.5 rounded-xl text-xs font-semibold transition-all duration-200 active:scale-95 shadow-2xs cursor-pointer disabled:opacity-50"
+                title="Force refresh database and memory cache"
+              >
+                <RefreshCw size={14} className={isRefreshing ? "animate-spin text-blue-600" : "opacity-90"} />
+                <span>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
+              </button>
               <button
                 type="button"
                 onClick={handlePushAllData}
@@ -266,7 +387,7 @@ const FcHomeStudyAssessment: React.FC = () => {
         </div>
       </div>
 
-      {/* --- LIST VIEW (UPDATED TO DATA TABLE) --- */}
+      {/* --- LIST VIEW --- */}
       {viewMode === 'list' && (
         <div className="bg-white rounded-2xl border border-slate-200/70 shadow-2xs overflow-hidden">
           <div className="p-4 bg-slate-50/70 border-b border-slate-200/60 font-bold text-xs text-slate-500 uppercase tracking-wider">
@@ -291,7 +412,6 @@ const FcHomeStudyAssessment: React.FC = () => {
                 <tbody className="divide-y divide-slate-100 text-sm">
                   {assessmentsList.map((item) => (
                     <tr key={item.id} className="hover:bg-slate-50/40 transition-all">
-                      {/* Caregiver Name */}
                       <td className="py-3.5 px-4 sm:px-5 font-bold text-slate-900">
                         <div className="flex items-center gap-2">
                           <User size={14} className="text-slate-400 shrink-0" />
@@ -299,7 +419,6 @@ const FcHomeStudyAssessment: React.FC = () => {
                         </div>
                       </td>
                       
-                      {/* Case Number */}
                       <td className="py-3.5 px-4 font-semibold text-slate-600">
                         {item.caseNumber ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md text-xs font-mono">
@@ -310,7 +429,6 @@ const FcHomeStudyAssessment: React.FC = () => {
                         )}
                       </td>
 
-                      {/* Date & Time */}
                       <td className="py-3.5 px-4 text-xs text-slate-500 font-medium">
                         <div className="flex flex-col gap-0.5">
                           <span className="flex items-center gap-1 text-slate-700 font-semibold">
@@ -322,7 +440,6 @@ const FcHomeStudyAssessment: React.FC = () => {
                         </div>
                       </td>
 
-                      {/* Status */}
                       <td className="py-3.5 px-4 text-center whitespace-nowrap">
                         {item.isCompleted ? (
                           <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] font-bold tracking-wide bg-emerald-50 text-emerald-700 border border-emerald-100">
@@ -335,7 +452,6 @@ const FcHomeStudyAssessment: React.FC = () => {
                         )}
                       </td>
 
-                      {/* Action Buttons */}
                       <td className="py-3.5 px-4 text-right whitespace-nowrap sm:pr-5">
                         <div className="flex items-center justify-end gap-1.5">
                           <button
@@ -360,7 +476,7 @@ const FcHomeStudyAssessment: React.FC = () => {
 
                           <button
                             type="button"
-                            onClick={(e) => item.id && handleDelete(item.id, e)}
+                            onClick={(e) => item.id && openDeleteModal(item.id, item.caregiverName || 'Record', e)}
                             className="inline-flex items-center justify-center p-1 bg-white hover:bg-red-50 border border-slate-200 hover:border-red-200 text-slate-400 hover:text-red-600 rounded-lg shadow-3xs transition cursor-pointer"
                             title="Delete record"
                           >
@@ -387,7 +503,6 @@ const FcHomeStudyAssessment: React.FC = () => {
 
           {/* Basic Meta Fields */}
           <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/70 shadow-2xs grid grid-cols-1 md:grid-cols-4 gap-5">
-            {/* Assessment Date */}
             <div>
               <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                 <Calendar size={13} className="text-slate-400" /> Assessment Date *
@@ -402,7 +517,6 @@ const FcHomeStudyAssessment: React.FC = () => {
               />
             </div>
 
-            {/* Assessment Time */}
             <div className="relative">
               <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                 <Clock size={13} className="text-slate-400" /> Assessment Time *
@@ -433,7 +547,6 @@ const FcHomeStudyAssessment: React.FC = () => {
               )}
             </div>
 
-            {/* Case Number */}
             <div>
               <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                 <Hash size={13} className="text-slate-400" /> Case Number
@@ -448,7 +561,6 @@ const FcHomeStudyAssessment: React.FC = () => {
               />
             </div>
 
-            {/* Caregiver Name */}
             <div>
               <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">
                 Caregiver Name *

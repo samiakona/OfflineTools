@@ -1,4 +1,4 @@
-import { db } from '../db/dexie';
+import { db } from '../hooks/dexie';
 import type { CaseNote } from '../types/caseNote';
 
 

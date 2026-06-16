@@ -1,5 +1,5 @@
 
-import { db } from '../db/dexie';
+import { db } from '../hooks/dexie';
 import type { VisitNotesData } from '../types/visitNotes';
 
 export const visitNotesService = {

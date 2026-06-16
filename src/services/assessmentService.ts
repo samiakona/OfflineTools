@@ -1,5 +1,5 @@
 
-import { db, type AssessmentRecord } from '../db/dexie';
+import { db, type AssessmentRecord } from '../hooks/dexie';
 import type { AssessmentFormData } from '../types/assessment';
 export const assessmentService = {
   /**

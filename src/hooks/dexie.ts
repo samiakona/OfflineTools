@@ -17,6 +17,7 @@ export interface ThreatAssessment {
   isCompleted: boolean;
   createdAt: string;
   updatedAt: string;
+  caseNumber: string;
 }
 
 export interface AssessmentRecord extends AssessmentFormData {
@@ -38,7 +39,7 @@ export class HemaiyaOfflineDatabase extends Dexie {
     this.version(5).stores({
       caseNotes: '++id, date, serviceType, caseName, childName, createdAt',
       assessments: '++id, name, dateStarted, isCompleted',
-      threatAssessments: '++id, dateStarted, dateCompleted, safetyThreshold, isCompleted, createdAt, updatedAt',
+      threatAssessments: '++id, dateStarted,caseNumber, dateCompleted, safetyThreshold, isCompleted, createdAt, updatedAt',
       homeStudyAssessments: '++id, caregiverId, assessmentDate, isCompleted',
       visitNotes: '++id, date, caseNumber, children, isCompleted' 
     });

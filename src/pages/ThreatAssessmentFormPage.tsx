@@ -1,3 +1,5 @@
+// ThreatAssessmentFormPage.tsx (Updated version)
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { 
@@ -10,7 +12,7 @@ import { threatAssessmentService } from '../services/threatAssessmentService';
 interface ThreatAssessmentFormData {
   dateStarted: string;
   dateCompleted: string;
-  caseNumber: string; // নতুন যুক্ত করা হয়েছে
+  caseNumber: string;
   presentDanger: string[];
   presentDangerComments: string;
   impendingDanger: string[];
@@ -21,6 +23,12 @@ interface ThreatAssessmentFormData {
   isCompleted: boolean;
 }
 
+// Add interface for options
+interface SafetyThresholdOption {
+  id: number;
+  description: string;
+}
+
 export const ThreatAssessmentFormPage: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
@@ -28,10 +36,14 @@ export const ThreatAssessmentFormPage: React.FC = () => {
   const isEditMode = !!id;
   const isViewMode = location.state?.mode === 'view';
   
+  // Add state for safety threshold options
+  const [safetyThresholdOptions, setSafetyThresholdOptions] = useState<SafetyThresholdOption[]>([]);
+  const [isLoadingOptions, setIsLoadingOptions] = useState(false);
+  
   const [formData, setFormData] = useState<ThreatAssessmentFormData>({
     dateStarted: new Date().toISOString().split('T')[0],
     dateCompleted: '',
-    caseNumber: '', // নতুন যুক্ত করা হয়েছে
+    caseNumber: '',
     presentDanger: [],
     presentDangerComments: '',
     impendingDanger: [],
@@ -46,6 +58,31 @@ export const ThreatAssessmentFormPage: React.FC = () => {
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [originalIsCompleted, setOriginalIsCompleted] = useState<boolean>(false);
 
+  // Load safety threshold options on component mount
+  useEffect(() => {
+    const fetchSafetyThresholdOptions = async () => {
+      setIsLoadingOptions(true);
+      try {
+        const options = await threatAssessmentService.getSafetyThresholdOptions();
+        setSafetyThresholdOptions(options);
+      } catch (error) {
+        console.error('Error loading safety threshold options:', error);
+        // Fallback options
+        setSafetyThresholdOptions([
+          { id: 1, description: 'Severe Consequences For The Child' },
+          { id: 2, description: 'Immediate Or Will Occur In Near Future' },
+          { id: 3, description: 'Vulnerabilty' },
+          { id: 4, description: 'Out-Of-Control: No Adult In Household To Prevent' },
+          { id: 5, description: 'Behaviors, Conditions Are Specific, Observable And Clearly Understood' }
+        ]);
+      } finally {
+        setIsLoadingOptions(false);
+      }
+    };
+
+    fetchSafetyThresholdOptions();
+  }, []);
+
   // Load data for edit/view mode
   useEffect(() => {
     if (id) {
@@ -56,7 +93,7 @@ export const ThreatAssessmentFormPage: React.FC = () => {
             const loadedData = {
               dateStarted: record.dateStarted ?? '',
               dateCompleted: record.dateCompleted ?? '',
-              caseNumber: record.caseNumber ?? '', // নতুন যুক্ত করা হয়েছে
+              caseNumber: record.caseNumber ?? '',
               presentDanger: record.presentDanger ?? [],
               presentDangerComments: record.presentDangerComments ?? '',
               impendingDanger: record.impendingDanger ?? [],
@@ -92,20 +129,14 @@ export const ThreatAssessmentFormPage: React.FC = () => {
     e.preventDefault();
     if (isReadOnly) return;
     
-    // Validation: If completed but dateCompleted is empty
     if (formData.isCompleted && !formData.dateCompleted) {
       alert('Please select a completion date before marking as completed.');
       return;
     }
     
-    console.log('=== SAVING ASSESSMENT ===');
-    console.log('dateCompleted:', formData.dateCompleted);
-    console.log('isCompleted:', formData.isCompleted);
-    
     setIsSaving(true);
     try {
       let dataToSave = { ...formData };
-      console.log('Data to save:', dataToSave);
 
       if (isEditMode && id) {
         await threatAssessmentService.updateAssessment(Number(id), dataToSave);
@@ -162,7 +193,7 @@ export const ThreatAssessmentFormPage: React.FC = () => {
           setFormData({
             dateStarted: record.dateStarted ?? '',
             dateCompleted: record.dateCompleted ?? '',
-            caseNumber: record.caseNumber ?? '', // নতুন যুক্ত করা হয়েছে
+            caseNumber: record.caseNumber ?? '',
             presentDanger: record.presentDanger ?? [],
             presentDangerComments: record.presentDangerComments ?? '',
             impendingDanger: record.impendingDanger ?? [],
@@ -183,6 +214,22 @@ export const ThreatAssessmentFormPage: React.FC = () => {
     }
   };
 
+  // Helper function to get display label
+  const getSafetyThresholdLabel = (value: string): string => {
+    if (!value) return '';
+    
+    // Try to find by description
+    const byDescription = safetyThresholdOptions.find(opt => opt.description === value);
+    if (byDescription) return byDescription.description;
+    
+    // Try to find by ID
+    const byId = safetyThresholdOptions.find(opt => opt.id === Number(value));
+    if (byId) return byId.description;
+    
+    return value;
+  };
+
+  // Present Danger Categories (unchanged)
   const presentDangerCategories = [
     { cat: "General", items: ["Severe, extreme maltreatment suspected, observed or confirmed", "Child has multiple or different kinds of injuries", "Child has injuries to face or head", "Maltreatment demonstrates bizarre cruelty", "Maltreatment of several victims suspected, observed or confirmed", "Maltreatment appears premeditated", "Dangerous (life threatening) living arrangements", "Current report represents a serious threat and there is a history of referrals", "Child is accessible to person alleged to have maltreated the child"] },
     { cat: "When considered in the context of the Child", items: ["Parent's viewpoint of child is bizarre", "Child is unable to care for self and unsupervised or alone at time of referral", "Child needs medical attention at time of referral", "Child is profoundly fearful or anxious of home situation at time of referral"] },
@@ -195,8 +242,22 @@ export const ThreatAssessmentFormPage: React.FC = () => {
   ];
 
   const alternativeInterventionItems = [
-    "Failure to provide medical treatment for a non-emergent, minor discomfort, illness for the child.", "Potential safety concerns in and around the home.", "Reoccurring / Ongoing cases of head lice, scabies, etc.", "Sudden decline in child's normal behaviors or displays minor behavioral problems, physical, mental, or social concerns.", "Complaint about child's hygiene have been made by others (school, etc.), child may emit body odor or mouth odor or peers will not play with child.", "Failure to provide adequate clothing, shelter, or nutrition that does not present an immediate safety or health issue to the child.", "Child/Family would benefit from additional resources and might not be receiving such services.", "Family reports trouble accessing resources, supports, etc.", "Family reports insufficient resources and supports resulting in child's well-being concerns."
+    "Failure to provide medical treatment for a non-emergent, minor discomfort, illness for the child.",
+    "Potential safety concerns in and around the home.",
+    "Reoccurring / Ongoing cases of head lice, scabies, etc.",
+    "Sudden decline in child's normal behaviors or displays minor behavioral problems, physical, mental, or social concerns.",
+    "Complaint about child's hygiene have been made by others (school, etc.), child may emit body odor or mouth odor or peers will not play with child.",
+    "Failure to provide adequate clothing, shelter, or nutrition that does not present an immediate safety or health issue to the child.",
+    "Child/Family would benefit from additional resources and might not be receiving such services.",
+    "Family reports trouble accessing resources, supports, etc.",
+    "Family reports insufficient resources and supports resulting in child's well-being concerns."
   ];
+
+  // Transform options for CustomSelect
+  const selectOptions = safetyThresholdOptions.map(opt => ({
+    value: opt.description, // Store description
+    label: opt.description
+  }));
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 text-slate-800 pb-16 antialiased p-2">
@@ -259,61 +320,58 @@ export const ThreatAssessmentFormPage: React.FC = () => {
       <form onSubmit={handleSubmit} className="bg-slate-50/60 rounded-2xl p-2 sm:p-4 space-y-6">
         
         {/* Date & Case Number Section */}
-        {/* এখানে grid-cols-1 md:grid-cols-2 কে md:grid-cols-3 এ পরিবর্তন করা হয়েছে ৩টি ফিল্ড পাশাপাশি দেখানোর জন্য */}
-    {/* Date & Case Number Section */}
-<div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/70 shadow-xs grid grid-cols-1 md:grid-cols-3 gap-5">
-  <div>
-    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-      <Calendar size={13} className="text-slate-400" /> Date Threat Assessment Started *
-    </label>
-    <input 
-      type="date" 
-      value={formData.dateStarted} 
-      onChange={(e) => updateField('dateStarted', e.target.value)} 
-      disabled={isReadOnly}
-      required
-      className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl bg-white disabled:bg-slate-100/80 disabled:text-slate-400 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 font-medium transition shadow-2xs text-slate-700"
-    />
-  </div>
-  <div>
-    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-      <Calendar size={13} className="text-slate-400" /> Date Threat Assessment Completed
-    </label>
-    <input 
-      type="date" 
-      value={formData.dateCompleted} 
-      onChange={(e) => updateField('dateCompleted', e.target.value)}
-      disabled={isReadOnly}
-      className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl bg-white disabled:bg-slate-100/80 disabled:text-slate-400 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 font-medium transition shadow-2xs text-slate-700"
-    />
-    {formData.dateCompleted && (
-      <p className="text-[10px] text-blue-500 mt-1 flex items-center gap-1">
-        <Calendar size={10} /> Selected: {formData.dateCompleted}
-      </p>
-    )}
-    {formData.isCompleted && (
-      <p className="text-[10px] text-emerald-600 mt-1 flex items-center gap-1">
-        <Check size={10} /> Assessment will be locked when saved
-      </p>
-    )}
-  </div>
-  
-  {/* এই নতুন ৩ নম্বর কলামটি যোগ করার পর আপনার ফাইলে আর কোনো সমস্যা থাকবে না */}
-  <div>
-    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-      <Hash size={13} className="text-slate-400" /> Case Number
-    </label>
-    <input 
-      type="text" 
-      placeholder="Enter case number"
-      value={formData.caseNumber} 
-      onChange={(e) => updateField('caseNumber', e.target.value)}
-      disabled={isReadOnly}
-      className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl bg-white disabled:bg-slate-100/80 disabled:text-slate-400 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 font-medium transition shadow-2xs text-slate-700"
-    />
-  </div>
-</div>
-        {/* Rest of your form sections remain the same */}
+        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/70 shadow-xs grid grid-cols-1 md:grid-cols-3 gap-5">
+          <div>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+              <Calendar size={13} className="text-slate-400" /> Date Threat Assessment Started *
+            </label>
+            <input 
+              type="date" 
+              value={formData.dateStarted} 
+              onChange={(e) => updateField('dateStarted', e.target.value)} 
+              disabled={isReadOnly}
+              required
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl bg-white disabled:bg-slate-100/80 disabled:text-slate-400 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 font-medium transition shadow-2xs text-slate-700"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+              <Calendar size={13} className="text-slate-400" /> Date Threat Assessment Completed
+            </label>
+            <input 
+              type="date" 
+              value={formData.dateCompleted} 
+              onChange={(e) => updateField('dateCompleted', e.target.value)}
+              disabled={isReadOnly}
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl bg-white disabled:bg-slate-100/80 disabled:text-slate-400 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 font-medium transition shadow-2xs text-slate-700"
+            />
+            {formData.dateCompleted && (
+              <p className="text-[10px] text-blue-500 mt-1 flex items-center gap-1">
+                <Calendar size={10} /> Selected: {formData.dateCompleted}
+              </p>
+            )}
+            {formData.isCompleted && (
+              <p className="text-[10px] text-emerald-600 mt-1 flex items-center gap-1">
+                <Check size={10} /> Assessment will be locked when saved
+              </p>
+            )}
+          </div>
+          
+          <div>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+              <Hash size={13} className="text-slate-400" /> Case Number
+            </label>
+            <input 
+              type="text" 
+              placeholder="Enter case number"
+              value={formData.caseNumber} 
+              onChange={(e) => updateField('caseNumber', e.target.value)}
+              disabled={isReadOnly}
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl bg-white disabled:bg-slate-100/80 disabled:text-slate-400 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 font-medium transition shadow-2xs text-slate-700"
+            />
+          </div>
+        </div>
+
         {/* Present Danger Section */}
         <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/70 shadow-xs space-y-5">
           <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5 text-red-700 font-extrabold text-xs tracking-wider uppercase">
@@ -432,27 +490,29 @@ export const ThreatAssessmentFormPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Safety Threshold Dropdown */}
+        {/* Safety Threshold Dropdown - UPDATED with dynamic options */}
         <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/70 shadow-xs space-y-4">
           <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5 text-slate-700 font-extrabold text-xs tracking-wider uppercase">
             <div className="p-1 bg-slate-100 rounded-md"><ShieldCheck size={14} /></div>
             <span>Decision Governance Matrix</span>
           </div>
           <div className="w-full md:w-1/2">
-            <label className="block text-[11px] font-bold text-slate-600 tracking-wide mb-1.5">Safety Threshold *</label>
+            <label className="block text-[11px] font-bold text-slate-600 tracking-wide mb-1.5">
+              Safety Threshold *
+              {isLoadingOptions && <span className="ml-2 text-slate-400 font-normal">(Loading options...)</span>}
+            </label>
             <CustomSelect 
               value={formData.safetyThreshold}
-              placeholder="Select Option"
-              options={[
-                { value: 'Safe', label: 'Safe' },
-                { value: 'Conditionally Safe', label: 'Conditionally Safe' },
-                { value: 'Unsafe', label: 'Unsafe' },
-                { value: 'Adult', label: 'Out Of Control: No Adult In Household' },
-                { value: 'Behaviors', label: 'Behaviors, Conditions Are Specific' }
-              ]}
+              placeholder={isLoadingOptions ? "Loading..." : "Select Option"}
+              options={selectOptions}
               onChange={(val) => updateField('safetyThreshold', val)}
-              disabled={isReadOnly}
+              disabled={isReadOnly || isLoadingOptions}
             />
+            {isViewMode && formData.safetyThreshold && (
+              <p className="text-[10px] text-slate-500 mt-1">
+                Selected: {getSafetyThresholdLabel(formData.safetyThreshold)}
+              </p>
+            )}
           </div>
         </div>
 

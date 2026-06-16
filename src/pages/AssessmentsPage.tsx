@@ -7,7 +7,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { assessmentService } from '../services/assessmentService'; 
 
-import type { AssessmentRecord } from '../db/dexie'; 
+import type { AssessmentRecord } from '../hooks/dexie'; 
 
 export const AssessmentsPage: React.FC = () => {
   const navigate = useNavigate();
