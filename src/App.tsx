@@ -11,11 +11,13 @@ import {ThreatAssessmentFormPage}   from './pages/ThreatAssessmentFormPage';
 import { AssessmentFormPage } from './pages/AssessmentFormPage';
 import FcHomeStudyAssessment from './pages/FcHomeStudyAssessment';
 import FcVisitNotes from './pages/FcVisitNotes';
+import { Toaster } from 'react-hot-toast';
 
 const App: React.FC = () => {
   return (
     <HashRouter>
       <DashboardLayout>
+        <Toaster position="top-right" reverseOrder={false} />
         <Routes>
           <Route path="/" element={<NoteList />} />
           <Route path="/add-note" element={<NoteFormPage />} />

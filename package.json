@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "main": "main.cjs",
-   "proxy": "http://localhost:5096", 
+  "proxy": "http://localhost:5096",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -44,6 +44,7 @@
     "lucide-react": "^1.17.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
+    "react-hot-toast": "^2.6.0",
     "react-router-dom": "^7.16.0"
   },
   "devDependencies": {

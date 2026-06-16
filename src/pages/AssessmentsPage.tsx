@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  ClipboardList, Plus, Edit2, Trash2, 
+   Plus, Edit2, Trash2, 
   AlertTriangle, ShieldCheck, ShieldAlert, Calendar, Search, X,
   Zap, CloudLightning, WifiOff, CheckCircle2, Hash
 } from 'lucide-react';

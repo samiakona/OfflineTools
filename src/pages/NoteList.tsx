@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Search, Plus, Trash2, Calendar, Clock, ChevronLeft, ChevronRight, Edit3, CloudLightning, Zap, WifiOff, X, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Search, Plus, Trash2, Calendar, Clock, ChevronLeft, ChevronRight, Edit3, CloudLightning, Zap, WifiOff, X, AlertTriangle, CheckCircle2, RefreshCw } from 'lucide-react';
 
 import { caseNoteService } from '../services/caseNoteService';
 import { useCaseNoteSync } from '../hooks/useCaseNoteSync';
@@ -43,12 +43,31 @@ export const NoteList: React.FC = () => {
   // Individual loading states for each button
   const [syncingNoteId, setSyncingNoteId] = useState<number | null>(null);
   const [syncingAll, setSyncingAll] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Modal states
   const [modalType, setModalType] = useState<'offline' | 'delete' | 'clear_db' | 'push_success' | 'none'>('none');
   const [selectedNoteId, setSelectedNoteId] = useState<number | null>(null);
 
-  const {  syncProgress, syncNote, syncAllLocalNotes, checkAPI } = useCaseNoteSync();
+  const { syncProgress, syncNote, syncAllLocalNotes, checkAPI } = useCaseNoteSync();
+
+  // 🟢 ১. উইন্ডোজ ক্যাশ এবং মেমরি পুরোপুরি ফ্রেশ করার জন্য হার্ড রিলোড ফাংশন
+  const handleHardRefresh = () => {
+    setIsRefreshing(true);
+    setTimeout(() => {
+      window.location.reload(); // এটি উইন্ডোজের ইলেকট্রন মেমরি পাইপলাইন ক্লিন করে দেবে
+    }, 150);
+  };
+
+  // 🟢 ২. অটো-মেমরি ক্লিনিং ট্রিক: অন্য পেজ (Add Note) থেকে যখনই এই পেজে ব্যাক করবে,
+  // তখন যদি উইন্ডোজের ওল্ড ক্যাশ সেশন থাকে, তাকে ফোর্স রিলোড করাবে একবার।
+  useEffect(() => {
+    const isFormSubmitted = localStorage.getItem('note_submitted');
+    if (isFormSubmitted === 'true') {
+      localStorage.removeItem('note_submitted'); // ফ্ল্যাগ ডিলিট
+      window.location.reload(); // হার্ড রিফ্রেশ
+    }
+  }, []);
 
   // Single note push handler with individual loading
   const handlePushSingleNote = async (note: any, event: React.MouseEvent) => {
@@ -73,7 +92,6 @@ export const NoteList: React.FC = () => {
       return;
     }
     
-    // Set loading state for this specific note only
     setSyncingNoteId(note.id);
     
     try {
@@ -110,8 +128,6 @@ export const NoteList: React.FC = () => {
       alert('No notes to sync');
       return;
     }
-    
-    console.log('Total notes to sync:', allNotes.length);
     
     setSyncingAll(true);
     
@@ -208,11 +224,22 @@ export const NoteList: React.FC = () => {
         {/* Buttons */}
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
           
-          {/* All Data Push Button - with separate loading state */}
+          {/* 🟢 নতুন যোগ করা ম্যানুয়াল হার্ড রিফ্রেশ বাটন */}
+          <button
+            onClick={handleHardRefresh}
+            disabled={isRefreshing}
+            className="flex items-center gap-1.5 sm:gap-2 border border-slate-200 text-slate-600 hover:text-slate-800 bg-white hover:bg-slate-50 px-3 py-2 sm:px-3.5 rounded-xl text-xs font-semibold transition-all duration-200 active:scale-95 shadow-2xs cursor-pointer disabled:opacity-50"
+            title="Force refresh database and memory cache"
+          >
+            <RefreshCw size={14} className={isRefreshing ? "animate-spin text-blue-600" : "opacity-90"} />
+            <span>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
+          </button>
+
+          {/* All Data Push Button */}
           <button
             onClick={handlePushAllData}
             disabled={syncingAll || syncingNoteId !== null}
-            className="flex items-center gap-1.5 sm:gap-2 bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 text-white px-3 py-2 sm:px-3.5 rounded-xl text-xs font-semibold transition-all duration-200 active:scale-95 shadow-2xs cursor-pointer disabled:opacity-50"
+            className="flex items-center gap-1.5 sm:gap-2 bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 text-white px-3 py-2 sm:px-3.5 rounded-xl text-xs font-semibold transition-all duration-200 active:scale-95 shadow-2xs disabled:opacity-50 cursor-pointer"
             title="Push all local data to server"
           >
             {syncingAll ? (
@@ -296,10 +323,9 @@ export const NoteList: React.FC = () => {
                   </span>
                   
                   <div className="flex items-center gap-1.5">
-                    {/* Push Button - Mobile with individual loading */}
                     <button
                       onClick={(e) => handlePushSingleNote(note, e)}
-                      className="p-2 bg-blue-50/70 text-blue-600 hover:bg-blue-100 border border-blue-100 rounded-xl active:scale-90 transition-all cursor-pointer disabled:opacity-50"
+                      className="p-2 bg-blue-50/70 text-blue-600 hover:bg-blue-100 border border-blue-100 rounded-xl active:scale-90 transition-all disabled:opacity-50 cursor-pointer"
                       title="Push Data"
                       disabled={syncingNoteId === note.id || syncingAll}
                     >
@@ -309,6 +335,8 @@ export const NoteList: React.FC = () => {
                         <CloudLightning size={13} />
                       )}
                     </button>
+                    
+                    {/* Edit Button - Mobile */}
                     <button
                       onClick={() => note.id !== undefined && navigate(`/edit-note/${note.id}`)}
                       className="p-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-xl active:scale-90 transition-all cursor-pointer"
@@ -316,6 +344,7 @@ export const NoteList: React.FC = () => {
                     >
                       <Edit3 size={13} />
                     </button>
+
                     <button
                       onClick={() => triggerRemoveNote(note.id)}
                       className="p-2 bg-white hover:bg-red-50 border border-slate-200 hover:border-red-200 text-slate-400 hover:text-red-600 rounded-xl active:scale-90 transition-all cursor-pointer"
@@ -439,14 +468,13 @@ export const NoteList: React.FC = () => {
                       {note.caseName || 'N/A'}
                     </td>
                     
-                    {/* Action Column with individual loading states */}
+                    {/* Action Column */}
                     <td className="p-4 text-center pr-6">
                       <div className="flex items-center justify-center gap-2">
-                        {/* Push Button - Desktop with individual loading */}
                         <button
                           onClick={(e) => handlePushSingleNote(note, e)}
                           disabled={syncingNoteId === note.id || syncingAll}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-blue-50/60 hover:bg-blue-50 border border-blue-200 text-blue-600 rounded-xl text-[11px] font-semibold shadow-2xs transition-all duration-150 active:scale-95 cursor-pointer disabled:opacity-50"
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-blue-50/60 hover:bg-blue-50 border border-blue-200 text-blue-600 rounded-xl text-[11px] font-semibold shadow-2xs transition-all duration-150 active:scale-95 disabled:opacity-50 cursor-pointer"
                         >
                           {syncingNoteId === note.id ? (
                             <div className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
@@ -477,7 +505,7 @@ export const NoteList: React.FC = () => {
                 ))
               )}
             </tbody>
-           </table>
+          </table>
         </div>
 
         {/* Pagination Panel */}
@@ -493,7 +521,7 @@ export const NoteList: React.FC = () => {
               <button 
                 disabled={currentPage === 1} 
                 onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} 
-                className="p-1.5 border border-slate-200 rounded-lg bg-white hover:bg-slate-50 transition-all disabled:opacity-40 disabled:hover:bg-white text-slate-600 cursor-pointer disabled:cursor-not-allowed active:scale-95 shadow-2xs"
+                className="p-1.5 border border-slate-200 rounded-lg bg-white hover:bg-slate-50 transition-all disabled:opacity-40 disabled:hover:bg-white text-slate-600 active:scale-95 shadow-2xs cursor-pointer"
               >
                 <ChevronLeft size={14} />
               </button>
@@ -502,7 +530,7 @@ export const NoteList: React.FC = () => {
                 <button
                   key={page}
                   onClick={() => setCurrentPage(page)}
-                  className={`min-w-[28px] h-7 px-1.5 rounded-lg text-xs font-bold transition-all duration-150 active:scale-95 ${
+                  className={`min-w-[28px] h-7 px-1.5 rounded-lg text-xs font-bold transition-all duration-150 active:scale-95 cursor-pointer ${
                     currentPage === page 
                       ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-2xs shadow-blue-600/10' 
                       : 'bg-white border border-slate-200 hover:bg-slate-50 text-slate-600'
@@ -515,7 +543,7 @@ export const NoteList: React.FC = () => {
               <button 
                 disabled={currentPage === totalPages} 
                 onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} 
-                className="p-1.5 border border-slate-200 rounded-lg bg-white hover:bg-slate-50 transition-all disabled:opacity-40 disabled:hover:bg-white text-slate-600 cursor-pointer disabled:cursor-not-allowed active:scale-95 shadow-2xs"
+                className="p-1.5 border border-slate-200 rounded-lg bg-white hover:bg-slate-50 transition-all disabled:opacity-40 disabled:hover:bg-white text-slate-600 active:scale-95 cursor-pointer"
               >
                 <ChevronRight size={14} />
               </button>

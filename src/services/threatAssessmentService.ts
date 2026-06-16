@@ -1,6 +1,7 @@
 import { db } from "../db/dexie";
 import type { ThreatAssessment } from "../types/ThreatAssessment";
 
+
 export const threatAssessmentService = {
   // Create new assessment
   async createAssessment(data: Omit<ThreatAssessment, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> {
@@ -15,12 +16,14 @@ export const threatAssessmentService = {
 
   // Get all assessments
   async getAllAssessments(): Promise<ThreatAssessment[]> {
-    return await db.threatAssessments.orderBy('createdAt').reverse().toArray();
+    const results = await db.threatAssessments.orderBy('createdAt').reverse().toArray();
+    return results as unknown as ThreatAssessment[];
   },
 
   // Get single assessment by ID
   async getAssessmentById(id: number): Promise<ThreatAssessment | undefined> {
-    return await db.threatAssessments.get(id);
+    const result = await db.threatAssessments.get(id);
+    return result as unknown as ThreatAssessment | undefined;
   },
 
   // Update assessment

@@ -8,6 +8,7 @@ import {
 import type { CaseNoteFormData } from '../types/caseNote';
 import { CustomSelect } from '../components/Common/CustomSelect';
 import { caseNoteService } from '../services/caseNoteService';
+import toast from 'react-hot-toast'; // 🟢 ১. react-hot-toast ইমপোর্ট করা হয়েছে
 
 // Enums and Lookup Data
 const CLIENT_TYPES = [
@@ -17,7 +18,6 @@ const CLIENT_TYPES = [
   { value: '3', label: 'Group' }
 ];
 
-// Updated Appointment Statuses
 const APPOINTMENT_STATUSES = [
   { value: '1', label: 'Attended' },
   { value: '2', label: 'Cancel By client' },
@@ -58,7 +58,7 @@ const LOCATIONS = [
   { value: '15', label: 'Child Support' },
   { value: '16', label: 'Enrollment' },
   { value: '17', label: 'Food Stamps' },
-  { value: '18', label: 'Community Visit' },
+  { value: '18', border: 'Community Visit', label: 'Community Visit' },
   { value: '19', label: 'Other' }
 ];
 
@@ -89,7 +89,6 @@ const SERVICE_TYPES = [
   { value: '24', label: 'Update Case Plan' }
 ];
 
-// Time options for dropdown (30-minute intervals)
 const TIME_OPTIONS = (() => {
   const times = [];
   for (let i = 0; i < 24; i++) {
@@ -108,26 +107,25 @@ export const NoteFormPage: React.FC = () => {
   const { id } = useParams<{ id: string }>(); 
   const isEditMode = Boolean(id);
 
-  // Form initial state
   const [formData, setFormData] = useState<CaseNoteFormData>({
     date: new Date().toISOString().split('T')[0],
     time: '09:30 AM',
     childName: '',
-    appointmentStatus: '1', // Defaulted to '1' (Attended) based on the new list
+    appointmentStatus: '1', 
     nextAppointmentDate: '',
     nextAppointmentTime: '',
-    contactType: '2', // Face to Face
-    location: '4', // School
-    serviceType: '7', // Child Contact
+    contactType: '2', 
+    location: '4', 
+    serviceType: '7', 
     additionalServices: [],
     durationMinutes: 60,
     caseName: '',
     narrative: '',
-    teamMember: 'Kona_Supervisor',
+    teamMember: '', 
     otherAttendees: '',
-    notifyTeam: true,
+    notifyTeam: false, 
     isCompleted: false,
-    clientType: '2', // Other
+    clientType: '2', 
     clientId: '',
     clientName: '',
   });
@@ -166,10 +164,8 @@ export const NoteFormPage: React.FC = () => {
     updateField('clientName', '');
   };
 
-  // Kept intact to avoid breaking logic if used elsewhere
   const handleClientNameChange = (value: string) => {
     updateField('clientName', value);
-    // Also syncing clientId with value just in case database schema expects it
     updateField('clientId', value); 
   };
 
@@ -178,8 +174,19 @@ export const NoteFormPage: React.FC = () => {
       caseNoteService.getNoteById(Number(id)).then((note) => {
         if (note) {
           const { id: _, createdAt, createdBy, updatedAt, updatedBy, ...rest } = note;
+          
+          let formattedDate = rest.date;
+          if (rest.date && rest.date.includes('T')) {
+            formattedDate = rest.date.split('T')[0];
+          }
+
+          const safeIsCompleted =
+            rest.isCompleted === true ||
+            String(rest.isCompleted).toLowerCase() === 'true';
+
           setFormData({
             ...rest,
+            date: formattedDate || new Date().toISOString().split('T')[0],
             clientType: rest.clientType || '2',
             clientId: rest.clientId || '',
             clientName: rest.clientName || '',
@@ -187,8 +194,10 @@ export const NoteFormPage: React.FC = () => {
             location: rest.location || '4',
             serviceType: rest.serviceType || '7',
             appointmentStatus: rest.appointmentStatus || '1',
-            notifyTeam: rest.notifyTeam !== undefined ? rest.notifyTeam : true,
+            notifyTeam: rest.notifyTeam !== undefined ? String(rest.notifyTeam) === 'true' : false, 
             durationMinutes: rest.durationMinutes || 60,
+            isCompleted: safeIsCompleted, 
+            teamMember: rest.teamMember || '', 
           });
           setAuditData({ createdBy, createdAt, updatedBy, updatedAt });
         }
@@ -198,7 +207,7 @@ export const NoteFormPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const currentOperator = formData.teamMember || 'Kona_Supervisor';
+    const currentOperator = formData.teamMember || 'System_Operator';
 
     const noteToSave = {
       date: formData.date,
@@ -224,24 +233,68 @@ export const NoteFormPage: React.FC = () => {
     };
 
     console.log('💾 Saving note with Case Name:', noteToSave.caseName);
-    console.log('📝 Full note data:', noteToSave);
 
     try {
       if (isEditMode && id) {
         await caseNoteService.updateNote(Number(id), noteToSave, currentOperator);
-        alert('✅ Case note updated successfully!');
+        
+        // 🟢 ২. সুন্দর টোস্ট অ্যালার্ট (আপডেট সাকসেস)
+        toast.success('Case note updated successfully!', {
+          duration: 3000,
+          style: {
+            fontFamily: 'sans-serif',
+            fontSize: '14px',
+            fontWeight: 'bold',
+            borderRadius: '12px',
+            background: '#334155',
+            color: '#fff',
+          },
+        });
+        
+        navigate('/');
       } else {
         await caseNoteService.createNote(noteToSave, currentOperator);
-        alert('✅ Case note created successfully!');
+        
+        setFormData(prev => ({
+          ...prev,
+          isCompleted: false
+        }));
+
+        // 🟢 ৩. সুন্দর টোস্ট অ্যালার্ট (ক্রিয়েট সাকসেস)
+        toast.success('Case note created successfully!', {
+          duration: 3000,
+          style: {
+            fontFamily: 'sans-serif',
+            fontSize: '14px',
+            fontWeight: 'bold',
+            borderRadius: '12px',
+            background: '#0ea5e9',
+            color: '#fff',
+          },
+        });
+        
+        setTimeout(() => {
+          localStorage.setItem('note_submitted', 'true');
+          navigate('/', { replace: true });
+        }, 150); // উইন্ডোজ ক্যাশ রিলিজের ট্রিকটা ঠিক রাখার জন্য স্লাইট ডিলে বাড়ানো হয়েছে যাতে টোস্ট ইমপ্যাক্ট পাওয়া যায়
       }
-      navigate('/');
     } catch (error) {
       console.error("❌ Failed to save case note:", error);
-      alert("❌ An error occurred while saving the document.");
+      
+      // 🟢 ৪. এরর মেসেজের জন্য টোস্ট অ্যালার্ট
+      toast.error('An error occurred while saving the document.', {
+        style: {
+          borderRadius: '12px',
+          background: '#ef4444',
+          color: '#fff',
+        }
+      });
     }
   };
 
-  const isReadOnly = formData.isCompleted;
+  const isReadOnly = 
+    formData.isCompleted === true || 
+    String(formData.isCompleted).toLowerCase() === 'true';
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 text-slate-800 pb-16 antialiased p-2">
@@ -506,7 +559,6 @@ export const NoteFormPage: React.FC = () => {
               <label className="block text-[11px] font-bold text-slate-600 tracking-wide mb-1.5 flex items-center gap-1">
                 <Users size={12} /> Team Member
               </label>
-              {/* ড্রপডাউন পরিবর্তন করে ইনপুট ফিল্ড বসানো হয়েছে */}
               <input 
                 type="text"
                 value={formData.teamMember}
