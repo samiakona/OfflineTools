@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { 
-  ArrowLeft, Calendar, ShieldCheck, Home, 
-  User, AlertTriangle, FileText, Check, Lock, Hash 
+import {
+  ArrowLeft, Calendar, ShieldCheck, Home,
+  User, AlertTriangle, FileText, Check, Lock, Hash
 } from 'lucide-react';
 import { CustomSelect } from '../components/Common/CustomSelect';
 import { assessmentService } from '../services/assessmentService';
@@ -39,7 +39,7 @@ export const AssessmentFormPage: React.FC = () => {
     capacities: [],
     abandonmentText: '',
     isCompleted: false,
-     isChildSafeAtHome: true // 👈 এই লাইন যোগ করুন
+    isChildSafeAtHome: true // 👈 এই লাইন যোগ করুন
   });
 
   // 📥 ইডিট মোড হলে ডেটাবেজ থেকে পুরাতন ডেটা ফর্মে লোড করা
@@ -123,13 +123,13 @@ export const AssessmentFormPage: React.FC = () => {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 text-slate-800 pb-16 antialiased p-2">
-      
+
       {/* 🔝 Top Header Navigation */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-200/80 pb-5 gap-4">
         <div className="flex items-center gap-4">
-          <button 
+          <button
             type="button"
-            onClick={() => navigate('/assessments')} 
+            onClick={() => navigate('/assessments')}
             className="p-2.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 rounded-xl transition-all shadow-2xs active:scale-95"
           >
             <ArrowLeft size={16} strokeWidth={2.5} />
@@ -154,17 +154,17 @@ export const AssessmentFormPage: React.FC = () => {
 
       {/* 📦 Form Container */}
       <form onSubmit={handleSubmit} className="bg-slate-50/60 rounded-2xl p-2 sm:p-4 space-y-6">
-        
+
         {/* 📅 Card 1: Logistics & Timestamps (এটিকে ৩টি কলামের গ্রিড করা হয়েছে) */}
         <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/70 shadow-xs grid grid-cols-1 md:grid-cols-3 gap-5">
           <div>
             <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
               <Calendar size={13} className="text-slate-400" /> Date Assessment Started *
             </label>
-            <input 
-              type="date" 
-              value={formData.dateStarted} 
-              onChange={(e) => updateField('dateStarted', e.target.value)} 
+            <input
+              type="date"
+              value={formData.dateStarted}
+              onChange={(e) => updateField('dateStarted', e.target.value)}
               disabled={isReadOnly}
               required
               className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl bg-white disabled:bg-slate-100/80 disabled:text-slate-400 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 font-medium transition shadow-2xs text-slate-700"
@@ -175,10 +175,10 @@ export const AssessmentFormPage: React.FC = () => {
             <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
               <Calendar size={13} className="text-slate-400" /> Date Assessment Completed
             </label>
-            <input 
-              type="date" 
-              value={formData.dateCompleted} 
-              onChange={(e) => updateField('dateCompleted', e.target.value)} 
+            <input
+              type="date"
+              value={formData.dateCompleted}
+              onChange={(e) => updateField('dateCompleted', e.target.value)}
               disabled={isReadOnly}
               className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl bg-white disabled:bg-slate-100/80 disabled:text-slate-400 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 font-medium transition shadow-2xs text-slate-700"
             />
@@ -189,11 +189,11 @@ export const AssessmentFormPage: React.FC = () => {
             <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
               <Hash size={13} className="text-slate-400" /> Case Number
             </label>
-            <input 
-              type="text" 
+            <input
+              type="text"
               placeholder="Enter case number"
-              value={formData.caseNumber || ''} 
-              onChange={(e) => updateField('caseNumber', e.target.value)} 
+              value={formData.caseNumber || ''}
+              onChange={(e) => updateField('caseNumber', e.target.value)}
               disabled={isReadOnly}
               className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl bg-white disabled:bg-slate-100/80 disabled:text-slate-400 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 font-medium transition shadow-2xs text-slate-700"
             />
@@ -209,26 +209,49 @@ export const AssessmentFormPage: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
               <label className="block text-[11px] font-bold text-slate-600 tracking-wide mb-1.5">Name *</label>
-              <input 
-                type="text" 
-                value={formData.name} 
-                onChange={(e) => updateField('name', e.target.value)} 
-                disabled={isReadOnly} 
-                required 
-                placeholder="Full Name" 
-                className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 font-medium transition shadow-2xs" 
+              <input
+                type="text"
+                value={formData.name}
+                onChange={(e) => updateField('name', e.target.value)}
+                disabled={isReadOnly}
+                required
+                placeholder="Full Name"
+                className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 font-medium transition shadow-2xs"
               />
             </div>
             <div>
               <label className="block text-[11px] font-bold text-slate-600 tracking-wide mb-1.5">Relationship *</label>
-              <CustomSelect 
+              <CustomSelect
                 value={formData.relationship}
                 placeholder="Select Option"
                 options={[
-                  { value: 'Mother', label: 'Mother' },
-                  { value: 'Father', label: 'Father' },
-                  { value: 'Guardian', label: 'Guardian' },
-                  { value: 'Other', label: 'Other' }
+                  { value: '1', label: 'Mother' },
+                  { value: '2', label: 'Father' },
+                  { value: '3', label: 'Stepmother' },
+                  { value: '4', label: 'Stepfather' },
+                  { value: '5', label: 'Grandmother' },
+                  { value: '6', label: 'Grandfather' },
+                  { value: '7', label: 'Sibling' },
+                  { value: '8', label: 'Cousin' },
+                  { value: '9', label: 'Aunt' },
+                  { value: '10', label: 'Uncle' },
+                  { value: '11', label: 'Neighbor' },
+                  { value: '12', label: 'Other' },
+                  { value: '13', label: 'N/A	N/A' },
+                  { value: '14', label: 'Collateral' },
+                  { value: '15', label: 'Medical Staff' },
+                  { value: '16', label: 'School Staff' },
+                  { value: '17', label: 'Law Enforcement' },
+                  { value: '18', label: 'Child Welfare Staff' },
+                  { value: '19', label: 'Parents' },
+                  { value: '20', label: 'Self' },
+                  { value: '21', label: 'Son' },
+                  { value: '22', label: 'Daughter' },
+                  { value: '23', label: 'Step-Son' },
+                  { value: '24', label: 'Step-Daughter' },
+                  { value: '25', label: 'Adult Welfare Staff' },
+                  { value: '26', label: 'Adoptive Father' },
+                  { value: '27', label: 'Adoptive Mother' },
                 ]}
                 onChange={(val) => updateField('relationship', val)}
                 disabled={isReadOnly}
@@ -239,26 +262,26 @@ export const AssessmentFormPage: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             <div className="md:col-span-2">
               <label className="block text-[11px] font-bold text-slate-600 tracking-wide mb-1.5">Address *</label>
-              <input 
-                type="text" 
-                value={formData.address} 
-                onChange={(e) => updateField('address', e.target.value)} 
-                disabled={isReadOnly} 
+              <input
+                type="text"
+                value={formData.address}
+                onChange={(e) => updateField('address', e.target.value)}
+                disabled={isReadOnly}
                 required
-                placeholder="Street address" 
-                className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-blue-500 font-medium transition shadow-2xs" 
+                placeholder="Street address"
+                className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-blue-500 font-medium transition shadow-2xs"
               />
             </div>
             <div>
               <label className="block text-[11px] font-bold text-slate-600 tracking-wide mb-1.5">City *</label>
-              <input 
-                type="text" 
-                value={formData.city} 
-                onChange={(e) => updateField('city', e.target.value)} 
-                disabled={isReadOnly} 
+              <input
+                type="text"
+                value={formData.city}
+                onChange={(e) => updateField('city', e.target.value)}
+                disabled={isReadOnly}
                 required
-                placeholder="City" 
-                className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-blue-500 font-medium transition shadow-2xs" 
+                placeholder="City"
+                className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-blue-500 font-medium transition shadow-2xs"
               />
             </div>
           </div>
@@ -266,13 +289,61 @@ export const AssessmentFormPage: React.FC = () => {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
             <div>
               <label className="block text-[11px] font-bold text-slate-600 tracking-wide mb-1.5">State *</label>
-              <CustomSelect 
+              <CustomSelect
                 value={formData.state}
                 placeholder="Select State"
                 options={[
-                  { value: 'CA', label: 'California' },
-                  { value: 'NY', label: 'New York' },
-                  { value: 'TX', label: 'Texas' }
+
+                  { value: '1', label: 'California' },
+                  { value: '2', label: 'Alabama' },
+                  { value: '3', label: 'Alaska' },
+                  { value: '4', label: 'Arizona' },
+                  { value: '5', label: 'Arkansas' },
+                  { value: '6', label: 'Colorado' },
+                  { value: '7', label: 'Connecticut' },
+                  { value: '8', label: 'Delaware' },
+                  { value: '9', label: 'Florida' },
+                  { value: '10', label: 'Georgia' },
+                  { value: '11', label: 'Hawaii' },
+                  { value: '12', label: 'Idaho' },
+                  { value: '13', label: 'Illinois' },
+                  { value: '14', label: 'Indiana' },
+                  { value: '15', label: 'Iowa' },
+                  { value: '16', label: 'Kansas' },
+                  { value: '17', label: 'Kentucky' },
+                  { value: '18', label: 'Louisiana' },
+                  { value: '19', label: 'Maine' },
+                  { value: '20', label: 'Maryland' },
+                  { value: '21', label: 'Massachusetts' },
+                  { value: '22', label: 'Michigan' },
+                  { value: '23', label: 'Minnesota' },
+                  { value: '24', label: 'Mississippi' },
+                  { value: '25', label: 'Missouri' },
+                  { value: '26', label: 'Montana' },
+                  { value: '27', label: 'Nebraska' },
+                  { value: '28', label: 'Nevada' },
+                  { value: '29', label: 'New Hampshire' },
+                  { value: '30', label: 'New Jersey' },
+                  { value: '31', label: 'New Mexico' },
+                  { value: '32', label: 'New York' },
+                  { value: '33', label: 'North Carolina' },
+                  { value: '34', label: 'North Dakota' },
+                  { value: '35', label: 'Ohio' },
+                  { value: '36', label: 'Oklahoma' },
+                  { value: '37', label: 'Oregon' },
+                  { value: '38', label: 'Pennsylvania' },
+                  { value: '39', label: 'Rhode Island' },
+                  { value: '40', label: 'South Carolina' },
+                  { value: '41', label: 'South Dakota' },
+                  { value: '42', label: 'Tennessee' },
+                  { value: '43', label: 'Texas' },
+                  { value: '44', label: 'Utah' },
+                  { value: '45', label: 'Vermont' },
+                  { value: '46', label: 'Virginia' },
+                  { value: '47', label: 'Washington' },
+                  { value: '48', label: 'West Virginia' },
+                  { value: '49', label: 'Wisconsin' },
+                  { value: '50', label: 'Wyoming' }
                 ]}
                 onChange={(val) => updateField('state', val)}
                 disabled={isReadOnly}
@@ -280,24 +351,81 @@ export const AssessmentFormPage: React.FC = () => {
             </div>
             <div>
               <label className="block text-[11px] font-bold text-slate-600 tracking-wide mb-1.5">Zip *</label>
-              <input 
-                type="text" 
-                value={formData.zip} 
-                onChange={(e) => updateField('zip', e.target.value)} 
-                disabled={isReadOnly} 
+              <input
+                type="text"
+                value={formData.zip}
+                onChange={(e) => updateField('zip', e.target.value)}
+                disabled={isReadOnly}
                 required
-                placeholder="Zip Code" 
-                className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-blue-500 font-medium transition shadow-2xs" 
+                placeholder="Zip Code"
+                className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-blue-500 font-medium transition shadow-2xs"
               />
             </div>
             <div>
               <label className="block text-[11px] font-bold text-slate-600 tracking-wide mb-1.5">County *</label>
-              <CustomSelect 
+              <CustomSelect
                 value={formData.county}
                 placeholder="Select County"
                 options={[
-                  { value: 'County A', label: 'County A' },
-                  { value: 'County B', label: 'County B' }
+
+                  { value: 'Alameda County', label: 'Alameda County' },
+                  { value: 'Alpine County', label: 'Alpine County' },
+                  { value: 'Amador County', label: 'Amador County' },
+                  { value: 'Butte County', label: 'Butte County' },
+                  { value: 'Calaveras County', label: 'Calaveras County' },
+                  { value: 'Colusa County', label: 'Colusa County' },
+                  { value: 'Contra Costa County', label: 'Contra Costa County' },
+                  { value: 'Del Norte County', label: 'Del Norte County' },
+                  { value: 'El Dorado County', label: 'El Dorado County' },
+                  { value: 'Fresno County', label: 'Fresno County' },
+                  { value: 'Glenn County', label: 'Glenn County' },
+                  { value: 'Humboldt County', label: 'Humboldt County' },
+                  { value: 'Imperial County', label: 'Imperial County' },
+                  { value: 'Inyo County', label: 'Inyo County' },
+                  { value: 'Kern County', label: 'Kern County' },
+                  { value: 'Kings County', label: 'Kings County' },
+                  { value: 'Lake County', label: 'Lake County' },
+                  { value: 'Lassen County', label: 'Lassen County' },
+                  { value: 'Los Angeles County', label: 'Los Angeles County' },
+                  { value: 'Madera County', label: 'Madera County' },
+                  { value: 'Marin County', label: 'Marin County' },
+                  { value: 'Mariposa County', label: 'Mariposa County' },
+                  { value: 'Mendocino County', label: 'Mendocino County' },
+                  { value: 'Merced County', label: 'Merced County' },
+                  { value: 'Modoc County', label: 'Modoc County' },
+                  { value: 'Mono County', label: 'Mono County' },
+                  { value: 'Monterey County', label: 'Monterey County' },
+                  { value: 'Napa County', label: 'Napa County' },
+                  { value: 'Nevada County', label: 'Nevada County' },
+                  { value: 'Orange County', label: 'Orange County' },
+                  { value: 'Placer County', label: 'Placer County' },
+                  { value: 'Plumas County', label: 'Plumas County' },
+                  { value: 'Riverside County', label: 'Riverside County' },
+                  { value: 'Sacramento County', label: 'Sacramento County' },
+                  { value: 'San Benito County', label: 'San Benito County' },
+                  { value: 'San Bernardino County', label: 'San Bernardino County' },
+                  { value: 'San Diego County', label: 'San Diego County' },
+                  { value: 'San Francisco County', label: 'San Francisco County' },
+                  { value: 'San Joaquin County', label: 'San Joaquin County' },
+                  { value: 'San Luis Obispo County', label: 'San Luis Obispo County' },
+                  { value: 'San Mateo County', label: 'San Mateo County' },
+                  { value: 'Santa Barbara County', label: 'Santa Barbara County' },
+                  { value: 'Santa Clara County', label: 'Santa Clara County' },
+                  { value: 'Santa Cruz County', label: 'Santa Cruz County' },
+                  { value: 'Shasta County', label: 'Shasta County' },
+                  { value: 'Sierra County', label: 'Sierra County' },
+                  { value: 'Siskiyou County', label: 'Siskiyou County' },
+                  { value: 'Solano County', label: 'Solano County' },
+                  { value: 'Sonoma County', label: 'Sonoma County' },
+                  { value: 'Stanislaus County', label: 'Stanislaus County' },
+                  { value: 'Sutter County', label: 'Sutter County' },
+                  { value: 'Tehama County', label: 'Tehama County' },
+                  { value: 'Trinity County', label: 'Trinity County' },
+                  { value: 'Tulare County', label: 'Tulare County' },
+                  { value: 'Tuolumne County', label: 'Tuolumne County' },
+                  { value: 'Ventura County', label: 'Ventura County' },
+                  { value: 'Yolo County', label: 'Yolo County' },
+                  { value: 'Yuba County', label: 'Yuba County' }
                 ]}
                 onChange={(val) => updateField('county', val)}
                 disabled={isReadOnly}
@@ -327,7 +455,7 @@ export const AssessmentFormPage: React.FC = () => {
             <div className="bg-slate-50/40 p-4 rounded-xl border border-slate-200/60 space-y-2">
               <h4 className="font-extrabold text-slate-400 text-[10px] uppercase tracking-wider mb-1.5">Access to Weapons</h4>
               {[
-                'Weapon(s) in Home', 'Weapon(s) Accessible', 
+                'Weapon(s) in Home', 'Weapon(s) Accessible',
                 'Guns & Ammunition NOT Stored Separately or Properly', 'No Concerns'
               ].map(opt => (
                 <label key={opt} className={`flex items-start gap-2.5 py-0.5 font-medium text-slate-700 ${isInputDisabled('weapons', opt) ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}>
@@ -416,13 +544,13 @@ export const AssessmentFormPage: React.FC = () => {
             <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
               <FileText size={13} className="text-slate-400" /> Please Explain Any of the Above Marked
             </label>
-            <textarea 
-              value={formData.homeConcernsExplanation} 
-              onChange={(e) => updateField('homeConcernsExplanation', e.target.value)} 
-              disabled={isReadOnly} 
-              rows={3} 
-              placeholder="Provide situational analysis context..." 
-              className="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-blue-500 font-medium transition shadow-2xs resize-none" 
+            <textarea
+              value={formData.homeConcernsExplanation}
+              onChange={(e) => updateField('homeConcernsExplanation', e.target.value)}
+              disabled={isReadOnly}
+              rows={3}
+              placeholder="Provide situational analysis context..."
+              className="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-blue-500 font-medium transition shadow-2xs resize-none"
             />
           </div>
 
@@ -438,12 +566,12 @@ export const AssessmentFormPage: React.FC = () => {
             {formData.otherRiskIssues === 'Yes' && (
               <div>
                 <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5">If YES, then Explain</label>
-                <textarea 
-                  value={formData.otherRiskExplanation} 
-                  onChange={(e) => updateField('otherRiskExplanation', e.target.value)} 
-                  disabled={isReadOnly} 
+                <textarea
+                  value={formData.otherRiskExplanation}
+                  onChange={(e) => updateField('otherRiskExplanation', e.target.value)}
+                  disabled={isReadOnly}
                   rows={2}
-                  className="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-blue-500 font-medium transition resize-none shadow-2xs" 
+                  className="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-blue-500 font-medium transition resize-none shadow-2xs"
                 />
               </div>
             )}
@@ -513,31 +641,31 @@ export const AssessmentFormPage: React.FC = () => {
             <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">
               Abandonment Or Aggravated Circumstances
             </label>
-            <textarea 
-              value={formData.abandonmentText} 
-              onChange={(e) => updateField('abandonmentText', e.target.value)} 
-              disabled={isReadOnly} 
-              rows={3} 
-              placeholder="Describe abandonment dynamics or factors..." 
-              className="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-blue-500 font-medium transition shadow-2xs resize-none" 
+            <textarea
+              value={formData.abandonmentText}
+              onChange={(e) => updateField('abandonmentText', e.target.value)}
+              disabled={isReadOnly}
+              rows={3}
+              placeholder="Describe abandonment dynamics or factors..."
+              className="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-blue-500 font-medium transition shadow-2xs resize-none"
             />
           </div>
         </div>
 
         {/* 🔒 Card 6: Read-Only Governance Panel */}
         <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/70 shadow-xs space-y-3">
-          <div 
+          <div
             onClick={() => {
               updateField('isCompleted', !formData.isCompleted);
             }}
             className={`flex items-start gap-4 bg-slate-50/50 hover:bg-slate-50 border border-slate-200/50 p-4 rounded-xl select-none transition-all group ${isReadOnly ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}
           >
             <div className="relative flex items-center justify-center w-5 h-5 mt-0.5 shrink-0">
-              <input 
-                type="checkbox" 
-                checked={formData.isCompleted} 
+              <input
+                type="checkbox"
+                checked={formData.isCompleted}
                 readOnly
-                className="sr-only" 
+                className="sr-only"
               />
               <div className={`w-5 h-5 bg-white border rounded-md flex items-center justify-center transition-all shadow-3xs group-hover:border-slate-400 ${formData.isCompleted ? 'border-emerald-600' : 'border-slate-300'}`}>
                 {formData.isCompleted && (
@@ -556,32 +684,31 @@ export const AssessmentFormPage: React.FC = () => {
 
         {/* 🏁 Bottom Action Buttons Panel */}
         <div className="flex justify-end items-center gap-3 pt-5 border-t border-slate-200/80">
-          <button 
-            type="button" 
-            onClick={() => navigate('/assessments')} 
+          <button
+            type="button"
+            onClick={() => navigate('/assessments')}
             className="px-5 py-2.5 border border-slate-200 text-slate-700 rounded-xl bg-white hover:bg-slate-50 text-xs font-bold shadow-2xs transition-all active:scale-95"
           >
             Cancel
           </button>
-          
-          <button 
-            type="submit" 
+
+          <button
+            type="submit"
             disabled={isReadOnly} // লক করা থাকলে বাটন ও ডিজেবল থাকবে
-            className={`px-6 py-2.5 rounded-xl text-xs font-bold text-white shadow-md transition-all active:scale-95 ${
-              isReadOnly 
-                ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
-                : formData.isCompleted 
-                  ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 shadow-emerald-600/10' 
-                  : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-blue-600/10'
-            }`}
+            className={`px-6 py-2.5 rounded-xl text-xs font-bold text-white shadow-md transition-all active:scale-95 ${isReadOnly
+              ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
+              : formData.isCompleted
+                ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 shadow-emerald-600/10'
+                : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-blue-600/10'
+              }`}
           >
             {/* 🌟 কন্ডিশনাল বাটন টেক্সট */}
-            {isReadOnly 
-              ? 'Locked & Saved' 
-              : formData.isCompleted 
-                ? 'Complete & Lock' 
-                : isEditMode 
-                  ? 'Update Assessment' 
+            {isReadOnly
+              ? 'Locked & Saved'
+              : formData.isCompleted
+                ? 'Complete & Lock'
+                : isEditMode
+                  ? 'Update Assessment'
                   : 'Save Draft'
             }
           </button>

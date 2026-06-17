@@ -1,10 +1,10 @@
 // services/assessmentApiForLive.ts
 
 // 🔧 API Configuration - Developer শুধু এই URL পরিবর্তন করবে
-const API_BASE_URL = 'http://localhost:5096/api';
+const API_BASE_URL = 'https://localhost:44361/api/OfflineSync';
 
 // 🎭 Mock Mode - true হলে রিয়েল API কল না করে Mock ডেটা দেখাবে
-const USE_MOCK_MODE = true; // Developer চাইলে false করে দিবে
+const USE_MOCK_MODE = false; // Developer চাইলে false করে দিবে
 
 export interface SyncResponse {
   success: boolean;
@@ -14,30 +14,30 @@ export interface SyncResponse {
   data?: any;
 }
 
-// Helper: State Lookup ID
-const getStateLookupId = (state: string): number => {
-  const mapping: Record<string, number> = {
-    'CA': 1, 'NY': 2, 'TX': 3, 'FL': 4, 'IL': 5,
-    'PA': 6, 'OH': 7, 'GA': 8, 'NC': 9, 'MI': 10,
-  };
-  return mapping[state] || 1;
-};
+// // Helper: State Lookup ID
+// const getStateLookupId = (state: string): number => {
+//   const mapping: Record<string, number> = {
+//     'CA': 1, 'NY': 2, 'TX': 3, 'FL': 4, 'IL': 5,
+//     'PA': 6, 'OH': 7, 'GA': 8, 'NC': 9, 'MI': 10,
+//   };
+//   return mapping[state] || 1;
+// };
 
-// Helper: Relationship Lookup ID
-const getRelationshipLookupId = (relationship: string): number => {
-  const mapping: Record<string, number> = {
-    'Mother': 1, 'Father': 2, 'Guardian': 3, 'Other': 4,
-  };
-  return mapping[relationship] || 3;
-};
+// // Helper: Relationship Lookup ID
+// const getRelationshipLookupId = (relationship: string): number => {
+//   const mapping: Record<string, number> = {
+//     'Mother': 1, 'Father': 2, 'Guardian': 3, 'Other': 4,
+//   };
+//   return mapping[relationship] || 3;
+// };
 
-// Helper: County Lookup ID
-const getCountyLookupId = (county: string): number => {
-  const mapping: Record<string, number> = {
-    'County A': 1, 'County B': 2,
-  };
-  return mapping[county] || 0;
-};
+// // Helper: County Lookup ID
+// const getCountyLookupId = (county: string): number => {
+//   const mapping: Record<string, number> = {
+//     'County A': 1, 'County B': 2,
+//   };
+//   return mapping[county] || 0;
+// };
 
 // 📤 Payload Builder Function - আপনার দেওয়া JSON Structure অনুযায়ী
 const buildAssessmentPayload = (safeData: any, caseNumber: string) => {
@@ -50,96 +50,101 @@ const buildAssessmentPayload = (safeData: any, caseNumber: string) => {
     caseNumber: caseNumber,
     
     assessmentStartedDate: safeData.assessmentStartedDate || safeData.dateStarted || new Date().toISOString().split('T')[0],
-    assessmentCompletedDate: safeData.assessmentCompletedDate || safeData.dateCompleted || '',
+    assessmentCompletedDate: (safeData.assessmentCompletedDate && safeData.assessmentCompletedDate !== 'Pending' && safeData.assessmentCompletedDate !== '') 
+      ? safeData.assessmentCompletedDate 
+      : (safeData.dateCompleted && safeData.dateCompleted !== 'Pending' && safeData.dateCompleted !== '') 
+        ? safeData.dateCompleted 
+        : null,
     homeName: safeData.homeName || safeData.name || '',
-    relationshipLookupId: safeData.relationshipLookupId || getRelationshipLookupId(safeData.relationship || 'Guardian'),
+    relationshipLookupId: safeData.relationship ? parseInt(safeData.relationship) : (safeData.relationshipLookupId || 0),
     
     address: safeData.address || '',
     city: safeData.city || '',
-    stateLookupId: safeData.stateLookupId || getStateLookupId(safeData.state || 'CA'),
+    stateLookupId: safeData.state ? parseInt(safeData.state) : (safeData.stateLookupId || 0),
     zip: safeData.zip || '',
     communityLookupId: safeData.communityLookupId || 1,
-    countyLookupId: safeData.countyLookupId || getCountyLookupId(safeData.county || 'County A'),
+    countyLookupId: safeData.countyLookupId || 0,
+    county: safeData.county || '',
     
-    areThereConcernsInTheHome: safeData.areThereConcernsInTheHome || false,
-    weaponInHome: safeData.weaponInHome || false,
-    weaponAccessible: safeData.weaponAccessible || false,
-    gunsAndAmmunitionNotStoredProperly: safeData.gunsAndAmmunitionNotStoredProperly || false,
-    noConcernsForAccessToWeapons: safeData.noConcernsForAccessToWeapons || false,
+    areThereConcernsInTheHome: safeData.hasHomeConcerns === 'Yes',
+    weaponInHome: (safeData.weapons || []).includes('Weapon(s) in Home'),
+    weaponAccessible: (safeData.weapons || []).includes('Weapon(s) Accessible'),
+    gunsAndAmmunitionNotStoredProperly: (safeData.weapons || []).includes('Guns & Ammunition NOT Stored Separately or Properly'),
+    noConcernsForAccessToWeapons: (safeData.weapons || []).includes('No Concerns'),
     
-    inadequateSleepingArrangements: safeData.inadequateSleepingArrangements || false,
-    childDoesNotHaveOwnSpace: safeData.childDoesNotHaveOwnSpace || false,
-    noConcernsForChildLivingSpace: safeData.noConcernsForChildLivingSpace || false,
+    inadequateSleepingArrangements: (safeData.livingSpace || []).includes('Inadequate Sleeping Arrangements'),
+    childDoesNotHaveOwnSpace: (safeData.livingSpace || []).includes('Child Does not have His/Her Own Space'),
+    noConcernsForChildLivingSpace: (safeData.livingSpace || []).includes('No Concerns'),
     
-    trashPiledUpInsideOrOutsideHome: safeData.trashPiledUpInsideOrOutsideHome || false,
-    clutterInsideTheHome: safeData.clutterInsideTheHome || false,
-    animalFecesWithinHome: safeData.animalFecesWithinHome || false,
-    insectsWithinHome: safeData.insectsWithinHome || false,
-    foodIsNotStoredProperly: safeData.foodIsNotStoredProperly || false,
-    noConcernsForSanitation: safeData.noConcernsForSanitation || false,
+    trashPiledUpInsideOrOutsideHome: (safeData.sanitation || []).includes('Trash or Bags of Trash piled up Inside or Outside The Home'),
+    clutterInsideTheHome: (safeData.sanitation || []).includes('Clutter Inside The Home That Affects The Living Environment'),
+    animalFecesWithinHome: (safeData.sanitation || []).includes('Animal Feces Within the home / Around Outside Home'),
+    insectsWithinHome: (safeData.sanitation || []).includes('Insects and Rodents Within The Home'),
+    foodIsNotStoredProperly: (safeData.sanitation || []).includes('Food Isn’t Stored Away Properly'),
+    noConcernsForSanitation: (safeData.sanitation || []).includes('No Concerns'),
     
-    poisonsNotStoredProperly: safeData.poisonsNotStoredProperly || false,
-    sharpObjectsNotStoredProperly: safeData.sharpObjectsNotStoredProperly || false,
-    smallObjectsWithinReach: safeData.smallObjectsWithinReach || false,
-    noConcernsForAccessToChemicals: safeData.noConcernsForAccessToChemicals || false,
+    poisonsNotStoredProperly: (safeData.chemicals || []).includes('Poisons Not Stored Away Properly'),
+    sharpObjectsNotStoredProperly: (safeData.chemicals || []).includes('Sharp objects Not Stored Away Properly'),
+    smallObjectsWithinReach: (safeData.chemicals || []).includes('Small Objects / Choking Hazards Within Reach'),
+    noConcernsForAccessToChemicals: (safeData.chemicals || []).includes('No Concerns'),
     
-    signsOfExcessiveAlcohol: safeData.signsOfExcessiveAlcohol || false,
-    medicationsNotStoredProperly: safeData.medicationsNotStoredProperly || false,
-    alcoholAndCigarettesNotOutOfReach: safeData.alcoholAndCigarettesNotOutOfReach || false,
-    noConcernsForSignsOfSubstanceUseOrAbuse: safeData.noConcernsForSignsOfSubstanceUseOrAbuse || false,
+    signsOfExcessiveAlcohol: (safeData.substanceUse || []).includes('Signs of Excessive Alcohol Use, and Use of Illicit Drugs, Accessible Drugs and Alcohol'),
+    medicationsNotStoredProperly: (safeData.substanceUse || []).includes('Medications Not Stored Away Properly (out of reach/in locked cabinet)'),
+    alcoholAndCigarettesNotOutOfReach: (safeData.substanceUse || []).includes('Alcohol and Cigarettes Not Out of Reach'),
+    noConcernsForSignsOfSubstanceUseOrAbuse: (safeData.substanceUse || []).includes('No Concerns'),
     
-    violenceInHomeOrNeighborhood: safeData.violenceInHomeOrNeighborhood || false,
-    trafficInAndOutOfTheHome: safeData.trafficInAndOutOfTheHome || false,
-    levelOfSupport: safeData.levelOfSupport || false,
-    inaccessibilityOfTransportation: safeData.inaccessibilityOfTransportation || false,
-    accessibilityOfCommunication: safeData.accessibilityOfCommunication || false,
-    noConcernsForClimateOfNeighborhoodOrHome: safeData.noConcernsForClimateOfNeighborhoodOrHome || false,
+    violenceInHomeOrNeighborhood: (safeData.climate || []).includes('High / Concerning Level of Violence in Home or Neighborhood'),
+    trafficInAndOutOfTheHome: (safeData.climate || []).includes('High / Concerning Traffic In and Out of The Home'),
+    levelOfSupport: (safeData.climate || []).includes('No or Low Level of Support'),
+    inaccessibilityOfTransportation: (safeData.climate || []).includes('Inaccessibility of Transportation'),
+    accessibilityOfCommunication: (safeData.climate || []).includes('Inaccessibility of Communication (telephone, other methods, etc.)'),
+    noConcernsForClimateOfNeighborhoodOrHome: (safeData.climate || []).includes('No Concerns'),
     
-    otherConcernsInHome: safeData.otherConcernsInHome || null,
+    otherConcernsInHome: safeData.homeConcernsExplanation || null,
     
-    physicalStatusOfHomeConcers: safeData.physicalStatusOfHomeConcers || false,
-    exposedElectricalWires: safeData.exposedElectricalWires || false,
-    exposedOutlets: safeData.exposedOutlets || false,
-    brokenWindows: safeData.brokenWindows || false,
-    noRunningWater: safeData.noRunningWater || false,
-    scaldingWater: safeData.scaldingWater || false,
-    standingWater: safeData.standingWater || false,
-    noPower: safeData.noPower || false,
-    inadequateHeatingOrCoolingSystem: safeData.inadequateHeatingOrCoolingSystem || false,
-    noSmokeMonoxideDetectors: safeData.noSmokeMonoxideDetectors || false,
-    stairsAreNotSecured: safeData.stairsAreNotSecured || false,
-    lackOfbarriersOnStairsPorchesAndWindows: safeData.lackOfbarriersOnStairsPorchesAndWindows || false,
-    holesInFloorOrWalls: safeData.holesInFloorOrWalls || false,
-    cordsOnBlindsAndCurtainsNotOutofReach: safeData.cordsOnBlindsAndCurtainsNotOutofReach || false,
-    moldOrMildewInTheHome: safeData.moldOrMildewInTheHome || false,
-    septicProblems: safeData.septicProblems || false,
-    othePhysicalStatusOfHomeConcerns: safeData.othePhysicalStatusOfHomeConcerns || null,
-    explainAnyOfPhysicalStatusOfHomeMarked: safeData.explainAnyOfPhysicalStatusOfHomeMarked || null,
+    physicalStatusOfHomeConcers: safeData.hasPhysicalConcerns === 'Yes',
+    exposedElectricalWires: (safeData.physicalItems || []).includes('Exposed Electrical Wires / Faulty Wiring'),
+    exposedOutlets: (safeData.physicalItems || []).includes('Exposed Outlets'),
+    brokenWindows: (safeData.physicalItems || []).includes('Broken Windows'),
+    noRunningWater: (safeData.physicalItems || []).includes('No Running Water / No Access to Water'),
+    scaldingWater: (safeData.physicalItems || []).includes('Scalding Water'),
+    standingWater: (safeData.physicalItems || []).includes('Standing Water (poses danger to drowning / insects / etc.)'),
+    noPower: (safeData.physicalItems || []).includes('No Power'),
+    inadequateHeatingOrCoolingSystem: (safeData.physicalItems || []).includes('Inadequate Heating/Cooling System'),
+    noSmokeMonoxideDetectors: (safeData.physicalItems || []).includes('Home Doesn’t Have Smoke/Carbon Monoxide Detectors'),
+    stairsAreNotSecured: (safeData.physicalItems || []).includes('Stairs Aren’t Secured'),
+    lackOfbarriersOnStairsPorchesAndWindows: (safeData.physicalItems || []).includes('Lack of Barriers on The Stairs, porches, and Windows'),
+    holesInFloorOrWalls: (safeData.physicalItems || []).includes('Holes in The Floor/Walls'),
+    cordsOnBlindsAndCurtainsNotOutofReach: (safeData.physicalItems || []).includes('Cords on Blinds and Curtains not Out of Reach (Age Appropriate)'),
+    moldOrMildewInTheHome: (safeData.physicalItems || []).includes('Mold / Mildew in The Home'),
+    septicProblems: (safeData.physicalItems || []).includes('Septic Problems'),
+    othePhysicalStatusOfHomeConcerns: (safeData.physicalItems || []).includes('Other'),
+    explainAnyOfPhysicalStatusOfHomeMarked: safeData.homeConcernsExplanation || null,
     
-    otheRiskIssuesInHome: safeData.otheRiskIssuesInHome || false,
-    otheRiskIssuesInHomeExplaintion: safeData.otheRiskIssuesInHomeExplaintion || null,
-    abandonmentORAggravatedCircumstances: safeData.abandonmentORAggravatedCircumstances || null,
+    otheRiskIssuesInHome: safeData.otherRiskIssues === 'Yes',
+    otheRiskIssuesInHomeExplaintion: safeData.otherRiskExplanation || null,
+    abandonmentORAggravatedCircumstances: safeData.abandonmentText || null,
     
-    isThereNeedForCustody: safeData.isThereNeedForCustody || false,
-    isChildSafeAtHome: safeData.isChildSafeAtHome || false,
-    safetyPlanCreated: safeData.safetyPlanCreated || false,
+    isThereNeedForCustody: (safeData.capacities || []).includes('Need For Custody'),
+    isChildSafeAtHome: (safeData.capacities || []).includes('Child Is Safe At Home') || safeData.isChildSafeAtHome || false,
+    safetyPlanCreated: (safeData.capacities || []).includes('Safety Plan Created'),
     
-    recognizesThreats: safeData.recognizesThreats || false,
-    canArticulateplanToProtectTheChild: safeData.canArticulateplanToProtectTheChild || false,
-    demonstratesProtectiveRoleAndResponsibilities: safeData.demonstratesProtectiveRoleAndResponsibilities || false,
-    recognizesTheChildsNeeds: safeData.recognizesTheChildsNeeds || false,
-    expressesEmpathySensitivityForTheChild: safeData.expressesEmpathySensitivityForTheChild || false,
-    hasKnowledgeToProtectTheChild: safeData.hasKnowledgeToProtectTheChild || false,
-    caretakerProcessesExternalWorld: safeData.caretakerProcessesExternalWorld || false,
-    hasCapacityToLearn: safeData.hasCapacityToLearn || false,
-    isEmotionallyAbleToInterveneAndProtect: safeData.isEmotionallyAbleToInterveneAndProtect || false,
-    isResilientAsCaregiver: safeData.isResilientAsCaregiver || false,
-    isAdaptiveAsCaregiver: safeData.isAdaptiveAsCaregiver || false,
-    setsAsideNeedsForChild: safeData.setsAsideNeedsForChild || false,
-    demonstratesTolerance: safeData.demonstratesTolerance || false,
-    demonstratesEmotionalControl: safeData.demonstratesEmotionalControl || false,
-    isPhysicallyAbleToProtect: safeData.isPhysicallyAbleToProtect || false,
-    caregiverAndChildHaveStrongEmotional: safeData.caregiverAndChildHaveStrongEmotional || false,
+    recognizesThreats: (safeData.capacities || []).includes('Recognizes Threats'),
+    canArticulateplanToProtectTheChild: (safeData.capacities || []).includes('Can Articulate a Plan Sufficient to Protect The Child'),
+    demonstratesProtectiveRoleAndResponsibilities: (safeData.capacities || []).includes('Demonstrates Protective Role and Responsibilities; Has a History of Taking Action to Protect'),
+    recognizesTheChildsNeeds: (safeData.capacities || []).includes('Recognizes The Child\'s Needs and Holds Realistic Expectations'),
+    expressesEmpathySensitivityForTheChild: (safeData.capacities || []).includes('Expresses Empathy and Sensitivity For The Child'),
+    hasKnowledgeToProtectTheChild: (safeData.capacities || []).includes('Has The Cognitive Capacity and Has Adequate Knowledge to Protect The Child, Including Using Resources Necessary to Meet The Child\'s Basic Needs'),
+    caretakerProcessesExternalWorld: (safeData.capacities || []).includes('The Caretaker Accurately processes The External World Without Distortions'),
+    hasCapacityToLearn: (safeData.capacities || []).includes('Has The Capacity to Learn From an Experience and Apply It to a New Situation'),
+    isEmotionallyAbleToInterveneAndProtect: (safeData.capacities || []).includes('Is Emotionally Able to Intervene And Protect'),
+    isResilientAsCaregiver: (safeData.capacities || []).includes('Is Resilient As a Caregiver'),
+    isAdaptiveAsCaregiver: (safeData.capacities || []).includes('Is Adaptive As a Caregiver'),
+    setsAsideNeedsForChild: (safeData.capacities || []).includes('Sets Aside Her/His Needs in Favor of The Child'),
+    demonstratesTolerance: (safeData.capacities || []).includes('Demonstrates Tolerance'),
+    demonstratesEmotionalControl: (safeData.capacities || []).includes('Demonstrates Sufficient Impulse and Emotional Control'),
+    isPhysicallyAbleToProtect: (safeData.capacities || []).includes('Is Physically Able to Protect'),
+    caregiverAndChildHaveStrongEmotional: (safeData.capacities || []).includes('Caregiver and Child Have a Strong Emotional Bond and Positive Attachment'),
     
     isCompleted: safeData.isCompleted || false,
     isDeleted: safeData.isDeleted || false
@@ -184,13 +189,11 @@ export const checkAssessmentAPIHealth = async (): Promise<boolean> => {
   }
   
   try {
-    console.log(`🔍 Checking API health at: ${API_BASE_URL}/sync`);
-    const response = await fetch(`${API_BASE_URL}/sync`, {
-      method: 'HEAD',
-      cache: 'no-cache',
-    });
-    console.log(`✅ API health check response: ${response.status}`);
-    return response.ok;
+    console.log(`🔍 Checking API health at: ${API_BASE_URL.split('/api')[0]}`);
+    const baseUrl = API_BASE_URL.split('/api')[0];
+    await fetch(`${baseUrl}`, { method: 'GET', mode: 'no-cors' });
+    console.log(`✅ API health check passed`);
+    return true;
   } catch (error) {
     console.error('❌ API health check failed:', error);
     return false;
@@ -208,7 +211,7 @@ export const syncAssessment = async (caseNumber: string, assessmentData: any): P
   try {
     const safeData = assessmentData || {};
     const encodedCaseNumber = encodeURIComponent(caseNumber || 'DEFAULT-CASE');
-    const url = `${API_BASE_URL}/sync?caseNumber=${encodedCaseNumber}`;
+    const url = `${API_BASE_URL}/PushAddHomeAssessmentWeb?caseNumber=${encodedCaseNumber}`;
     
     console.log('🔄 Syncing assessment for case:', caseNumber);
     console.log('📡 API URL:', url);
@@ -220,6 +223,7 @@ export const syncAssessment = async (caseNumber: string, assessmentData: any): P
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify(payload),
     });
 
