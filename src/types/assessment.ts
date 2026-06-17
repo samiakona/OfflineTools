@@ -23,4 +23,6 @@ export interface AssessmentFormData {
   capacities: string[];
   abandonmentText: string;
   isCompleted: boolean;
+  isChildSafeAtHome: boolean; // 👈 এই লাইন যোগ করুন
+  caseNumber: string
 }

@@ -9,7 +9,7 @@ import {
 import { CustomSelect } from '../components/Common/CustomSelect';
 import { threatAssessmentService } from '../services/threatAssessmentService';
 
-interface ThreatAssessmentFormData {
+interface ThreatAssessment {
   dateStarted: string;
   dateCompleted: string;
   caseNumber: string;
@@ -21,6 +21,7 @@ interface ThreatAssessmentFormData {
   alternativeInterventionComments: string;
   safetyThreshold: string;
   isCompleted: boolean;
+
 }
 
 // Add interface for options
@@ -40,7 +41,7 @@ export const ThreatAssessmentFormPage: React.FC = () => {
   const [safetyThresholdOptions, setSafetyThresholdOptions] = useState<SafetyThresholdOption[]>([]);
   const [isLoadingOptions, setIsLoadingOptions] = useState(false);
   
-  const [formData, setFormData] = useState<ThreatAssessmentFormData>({
+  const [formData, setFormData] = useState<ThreatAssessment>({
     dateStarted: new Date().toISOString().split('T')[0],
     dateCompleted: '',
     caseNumber: '',
@@ -120,7 +121,7 @@ export const ThreatAssessmentFormPage: React.FC = () => {
   // Determine if form should be read-only
   const isReadOnly = isViewMode || (isEditMode && originalIsCompleted && !isUnlocking);
 
-  const updateField = (name: keyof ThreatAssessmentFormData, value: any) => {
+  const updateField = (name: keyof ThreatAssessment, value: any) => {
     if (isReadOnly) return;
     setFormData(prev => ({ ...prev, [name]: value }));
   };

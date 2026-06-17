@@ -38,7 +38,8 @@ export const AssessmentFormPage: React.FC = () => {
     physicalItems: [],
     capacities: [],
     abandonmentText: '',
-    isCompleted: false 
+    isCompleted: false,
+     isChildSafeAtHome: true // 👈 এই লাইন যোগ করুন
   });
 
   // 📥 ইডিট মোড হলে ডেটাবেজ থেকে পুরাতন ডেটা ফর্মে লোড করা

@@ -1,23 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import { 
-   Plus, Edit2, Trash2, 
+  Plus, Edit2, Trash2, 
   AlertTriangle, ShieldCheck, ShieldAlert, Calendar, Search, X,
-  Zap, CloudLightning, WifiOff, CheckCircle2, Hash
+  Zap, CloudLightning, WifiOff, CheckCircle2, Hash, Loader2
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { assessmentService } from '../services/assessmentService'; 
-
-import type { AssessmentRecord } from '../hooks/dexie'; 
+import { assessmentService } from '../services/assessmentService';
+import { checkAssessmentAPIHealth, syncAssessment, syncMultipleAssessments } from '../services/assessmentApiForLive';
+import type { AssessmentRecord } from '../hooks/dexie';
 
 export const AssessmentsPage: React.FC = () => {
   const navigate = useNavigate();
   
   const [assessments, setAssessments] = useState<AssessmentRecord[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>(''); 
-  const [isLoading, setIsLoading] = useState<boolean>(true); 
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isPushingAll, setIsPushingAll] = useState<boolean>(false);
+  const [pushingIds, setPushingIds] = useState<Set<number>>(new Set()); // 👈 প্রতি Row-এর জন্য আলাদা State
+  const [isOnline, setIsOnline] = useState<boolean>(true);
+  const [pushResults, setPushResults] = useState<Array<{ id: number; success: boolean; error?: string }>>([]);
 
   // 📝 মোডাল স্টেটসমূহ
-  const [modalType, setModalType] = useState<'offline' | 'delete' | 'clear_db' | 'push_success' | 'none'>('none');
+  const [modalType, setModalType] = useState<'offline' | 'delete' | 'clear_db' | 'push_success' | 'push_failed' | 'push_progress' | 'none'>('none');
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
   // 📥 ডেটাবেজ থেকে সব রেকর্ড লোড করার ফাংশন
@@ -26,6 +30,9 @@ export const AssessmentsPage: React.FC = () => {
       setIsLoading(true);
       const data = await assessmentService.getAllAssessments();
       setAssessments(data);
+      
+      const online = await checkAssessmentAPIHealth();
+      setIsOnline(online);
     } catch (error) {
       console.error("Failed to fetch assessments from IndexedDB:", error);
     } finally {
@@ -35,9 +42,15 @@ export const AssessmentsPage: React.FC = () => {
 
   useEffect(() => {
     loadAssessments();
+    
+    const interval = setInterval(async () => {
+      const online = await checkAssessmentAPIHealth();
+      setIsOnline(online);
+    }, 30000);
+    
+    return () => clearInterval(interval);
   }, []);
 
-  // Escape key দিয়ে মোডাল বন্ধ করা
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') closeModal();
@@ -58,6 +71,7 @@ export const AssessmentsPage: React.FC = () => {
   const closeModal = () => {
     setModalType('none');
     setSelectedId(null);
+    setPushResults([]);
   };
 
   // ❌ একক রেকর্ড ডিলিট কনফার্মেশন
@@ -92,7 +106,93 @@ export const AssessmentsPage: React.FC = () => {
     }
   };
 
-  // 🔍 সার্চ ফিল্টারিং লজিক (সবগুলো আলাদা ফিল্ড ট্র্যাক করবে)
+  // 📤 একক রেকর্ড Push করার ফাংশন - প্রতি Row-এর জন্য আলাদা Loading
+  const handlePushSingle = async (id: number) => {
+    // Check connection first
+    const online = await checkAssessmentAPIHealth();
+    if (!online) {
+      setModalType('offline');
+      return;
+    }
+
+    // 👈 এই ID-টিকে Pushing List-এ যোগ করুন
+    setPushingIds(prev => new Set(prev).add(id));
+
+    try {
+      const record = await assessmentService.getAssessmentById(id);
+      if (!record) {
+        throw new Error('Record not found');
+      }
+      
+      const caseNumber = record.caseNumber || `ASSESSMENT-${id}`;
+      const result = await syncAssessment(caseNumber, record);
+      
+      setPushResults([{ id, success: result.success, error: result.success ? undefined : result.message }]);
+      
+      if (result.success) {
+        setModalType('push_success');
+      } else {
+        setModalType('push_failed');
+      }
+    } catch (error) {
+      setPushResults([{ id, success: false, error: 'Failed to push' }]);
+      setModalType('push_failed');
+    } finally {
+      // 👈 এই ID-টিকে Pushing List থেকে রিমুভ করুন
+      setPushingIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(id);
+        return newSet;
+      });
+    }
+  };
+
+  // 📤 সব রেকর্ড Push করার ফাংশন
+  const handlePushAll = async () => {
+    const online = await checkAssessmentAPIHealth();
+    if (!online) {
+      setModalType('offline');
+      return;
+    }
+
+    const records = await assessmentService.getAllAssessments();
+    if (records.length === 0) {
+      alert('No assessments to push!');
+      return;
+    }
+
+    setModalType('push_progress');
+    setIsPushingAll(true);
+
+    try {
+      const assessmentsForApi = records.map(record => ({
+        ...record,
+        caseNumber: record.caseNumber || `ASSESSMENT-${record.id}`
+      }));
+
+      const result = await syncMultipleAssessments(assessmentsForApi);
+      
+      const results = result.results.map((r, index) => ({
+        id: records[index]?.id || 0,
+        success: r.success,
+        error: r.error
+      }));
+      
+      setPushResults(results);
+      
+      if (result.success) {
+        setModalType('push_success');
+      } else {
+        setModalType('push_failed');
+      }
+    } catch (error) {
+      setModalType('push_failed');
+    } finally {
+      setIsPushingAll(false);
+    }
+  };
+
+  // 🔍 সার্চ ফিল্টারিং লজিক
   const filteredAssessments = assessments.filter(item => {
     const query = searchQuery.toLowerCase();
     
@@ -108,14 +208,124 @@ export const AssessmentsPage: React.FC = () => {
     return matchesCaseName || matchesName || matchesCaseNumber || matchesStatus;
   });
 
-  // মোডালের ডিসপ্লে নামের জন্য সেফটি ফলব্যাক
   const targetAssessment = assessments.find(a => a.id === selectedId);
   const selectedCaseName = targetAssessment?.caseName || targetAssessment?.name || 'Unnamed Case';
+
+  // Push Progress Modal Content
+  const renderPushProgress = () => (
+    <div className="space-y-4 text-center">
+      <div className="mx-auto w-11 h-11 bg-blue-50 rounded-full flex items-center justify-center border border-blue-100">
+        <Loader2 size={20} className="text-blue-500 animate-spin" />
+      </div>
+      <div className="space-y-1">
+        <h4 className="text-sm font-bold text-slate-900">Pushing to Server...</h4>
+        <p className="text-xs text-slate-500 leading-relaxed">
+          Please wait while the assessment data is being synced to the server.
+        </p>
+        <p className="text-[10px] text-slate-400">Check console for payload details</p>
+      </div>
+      <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+        <div className="bg-blue-600 h-full rounded-full animate-pulse w-full"></div>
+      </div>
+    </div>
+  );
+
+  // Push Success Modal Content
+  const renderPushSuccess = () => {
+    const successCount = pushResults.filter(r => r.success).length;
+    const totalCount = pushResults.length;
+    
+    return (
+      <div className="space-y-3">
+        <div className="mx-auto w-11 h-11 bg-emerald-50 rounded-full flex items-center justify-center border border-emerald-100">
+          <CheckCircle2 size={20} className="text-emerald-500" />
+        </div>
+        <div className="space-y-1">
+          <h4 className="text-sm font-bold text-slate-900">Sync Successful! 🎉</h4>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            {totalCount === 0 
+              ? 'All assessments have been successfully synced to the server.'
+              : `${successCount} out of ${totalCount} assessment records synced successfully.`
+            }
+          </p>
+          <p className="text-[10px] text-slate-400">
+            📤 Check console for complete payload details
+          </p>
+        </div>
+        {pushResults.length > 0 && (
+          <div className="max-h-32 overflow-y-auto bg-slate-50 rounded-lg p-2 text-left border border-slate-200">
+            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Sync Results:</p>
+            {pushResults.map((result, idx) => (
+              <div key={idx} className="text-[10px] font-medium flex items-center gap-2 py-1 border-b border-slate-100 last:border-0">
+                <span className={result.success ? 'text-emerald-600' : 'text-red-500'}>
+                  {result.success ? '✅' : '❌'}
+                </span>
+                <span className="text-slate-600">ID: {result.id}</span>
+                {result.error && <span className="text-red-400 text-[9px]">{result.error}</span>}
+              </div>
+            ))}
+          </div>
+        )}
+        <button onClick={closeModal} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs py-2.5 rounded-xl transition-all active:scale-98 shadow-xs cursor-pointer">
+          Awesome! 👏
+        </button>
+      </div>
+    );
+  };
+
+  // Push Failed Modal Content
+  const renderPushFailed = () => {
+    const failedCount = pushResults.filter(r => !r.success).length;
+    
+    return (
+      <div className="space-y-3">
+        <div className="mx-auto w-11 h-11 bg-red-50 rounded-full flex items-center justify-center border border-red-100">
+          <AlertTriangle size={20} className="text-red-500" />
+        </div>
+        <div className="space-y-1">
+          <h4 className="text-sm font-bold text-slate-900">Push Failed! 😕</h4>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            {pushResults.length === 0 
+              ? 'Failed to push assessments to server. Please check your connection and try again.'
+              : `${failedCount} out of ${pushResults.length} records failed to sync.`
+            }
+          </p>
+        </div>
+        {pushResults.some(r => r.error) && (
+          <div className="bg-red-50 border border-red-100 rounded-lg p-2 text-left max-h-24 overflow-y-auto">
+            <p className="text-[9px] font-bold text-red-400 uppercase tracking-wider mb-1">Errors:</p>
+            {pushResults.filter(r => r.error).map((result, idx) => (
+              <div key={idx} className="text-[10px] text-red-600 py-1 border-b border-red-100 last:border-0">
+                ID: {result.id} - {result.error}
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="flex items-center gap-2 pt-1">
+          <button onClick={closeModal} className="w-1/2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs py-2.5 rounded-xl transition-all active:scale-98 cursor-pointer">
+            Close
+          </button>
+          <button 
+            onClick={() => {
+              if (selectedId) {
+                handlePushSingle(selectedId);
+              } else {
+                handlePushAll();
+              }
+            }} 
+            className="w-1/2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs py-2.5 rounded-xl transition-all active:scale-98 shadow-xs cursor-pointer"
+          >
+            Retry 🔄
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6 text-slate-800 pb-16 antialiased p-2 relative max-w-[1600px] mx-auto sm:p-4">
       
-      {/* 🔝 Header Section */}   
+      {/* Header Section */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-200/80 pb-5 gap-4">
         <div>
           <h2 className="text-2xl font-black text-slate-900 tracking-tight">Assessments Log</h2>
@@ -124,17 +334,28 @@ export const AssessmentsPage: React.FC = () => {
           </p>
         </div>
 
-        {/* 🛠️ টপ অ্যাকশন বাটন সমূহ */}
+        {/* Top Action Buttons */}
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
           
+          {/* Connection Status */}
+          <span className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-bold border ${
+            isOnline ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-red-50 border-red-200 text-red-700'
+          }`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
+            {isOnline ? '🟢 Online' : '🔴 Offline'}
+          </span>
+
           {/* All Data Push Button */}
           <button
-            onClick={() => setModalType('push_success')}
-            className="flex items-center gap-1.5 bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 text-white px-3 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 active:scale-95 shadow-2xs cursor-pointer"
+            onClick={handlePushAll}
+            disabled={isPushingAll}
+            className={`flex items-center gap-1.5 bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 text-white px-3 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 active:scale-95 shadow-2xs ${
+              isPushingAll ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+            }`}
             title="Push all local data to server"
           >
-            <Zap size={14} />
-            <span>All Data Push</span>
+            {isPushingAll ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
+            <span>{isPushingAll ? 'Pushing...' : 'All Data Push'}</span>
           </button>
 
           {/* Clear DB Button */}
@@ -158,7 +379,7 @@ export const AssessmentsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* 🔍 Search & Filter Bar Utilities */}
+      {/* Search & Filter Bar */}
       <div className="flex flex-col sm:flex-row gap-3 justify-between items-center bg-slate-50/50 p-3 rounded-xl border border-slate-200/60">
         <div className="relative w-full sm:w-72">
           <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
@@ -177,13 +398,12 @@ export const AssessmentsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* 📊 Modern Datatable Container */}
+      {/* Datatable */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200/80">
-              
                 <th className="p-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Case Number</th>
                 <th className="p-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Date Started</th>
                 <th className="p-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center">Home Concerns</th>
@@ -196,27 +416,23 @@ export const AssessmentsPage: React.FC = () => {
             <tbody className="divide-y divide-slate-100">
               {isLoading ? (
                 <tr>
-                  <td colSpan={8} className="p-8 text-center text-slate-400 text-xs font-medium">
+                  <td colSpan={7} className="p-8 text-center text-slate-400 text-xs font-medium">
                     Loading assessments from offline database...
                   </td>
                 </tr>
               ) : filteredAssessments.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="p-8 text-center text-slate-400 text-xs font-medium italic">
+                  <td colSpan={7} className="p-8 text-center text-slate-400 text-xs font-medium italic">
                     No assessments recorded in this block.
                   </td>
                 </tr>
               ) : (
                 filteredAssessments.map((item) => {
                   const typedItem = item as AssessmentRecord & { caseNumber?: string };
+                  const isPushing = pushingIds.has(item.id || 0); // 👈 প্রতি Row-এর জন্য আলাদা Loading চেক
                   
                   return (
                     <tr key={item.id} className="hover:bg-slate-50/40 transition-colors group">
-                      
-                    
-                  
-
-                      {/* 🔢 Case Number Field (আলাদা কলাম) */}
                       <td className="p-4 whitespace-nowrap">
                         <div className="flex items-center gap-1.5 text-xs text-slate-600 font-semibold">
                           <Hash size={13} className="text-slate-400" />
@@ -224,7 +440,6 @@ export const AssessmentsPage: React.FC = () => {
                         </div>
                       </td>
 
-                      {/* Date Started */}
                       <td className="p-4 whitespace-nowrap">
                         <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
                           <Calendar size={13} className="text-slate-400" />
@@ -232,7 +447,6 @@ export const AssessmentsPage: React.FC = () => {
                         </div>
                       </td>
 
-                      {/* Home Concerns Badge */}
                       <td className="p-4 whitespace-nowrap text-center">
                         <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold border ${
                           item.hasHomeConcerns === 'Yes' ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-slate-50 border-slate-200 text-slate-600'
@@ -242,7 +456,6 @@ export const AssessmentsPage: React.FC = () => {
                         </span>
                       </td>
 
-                      {/* Physical Status Concerns Badge */}
                       <td className="p-4 whitespace-nowrap text-center">
                         <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold border ${
                           item.hasPhysicalConcerns === 'Yes' ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-slate-50 border-slate-200 text-slate-600'
@@ -252,7 +465,6 @@ export const AssessmentsPage: React.FC = () => {
                         </span>
                       </td>
 
-                      {/* Child Is Safe Visual Status */}
                       <td className="p-4 whitespace-nowrap text-center">
                         <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black tracking-wide uppercase border ${
                           item.childIsSafe === 'Yes' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-rose-100 border-rose-300 text-rose-800 animate-pulse'
@@ -262,26 +474,27 @@ export const AssessmentsPage: React.FC = () => {
                         </span>
                       </td>
 
-                      {/* Date Completed */}
                       <td className="p-4 whitespace-nowrap">
                         <span className={`text-xs font-semibold ${!item.dateCompleted || item.dateCompleted === 'Pending' ? 'text-amber-500 italic font-medium' : 'text-slate-600'}`}>
                           {item.dateCompleted || 'Pending'}
                         </span>
                       </td>
 
-                      {/* 🛠️ টেবিলের ভেতরের অ্যাকশন বাটনসমূহ */}
                       <td className="p-4 whitespace-nowrap text-center">
                         <div className="flex items-center justify-center gap-1.5">
                           
-                          {/* Push Button */}
+                          {/* Push Button - 🔥 প্রতি Row-এর জন্য আলাদা Loading */}
                           <button
                             type="button"
-                            onClick={() => setModalType('offline')}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-50/60 hover:bg-blue-50 border border-blue-200 text-blue-600 rounded-xl text-[11px] font-bold shadow-2xs transition-all duration-150 active:scale-95 cursor-pointer"
+                            onClick={() => item.id && handlePushSingle(item.id)}
+                            disabled={isPushing || isPushingAll}
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-50/60 hover:bg-blue-50 border border-blue-200 text-blue-600 rounded-xl text-[11px] font-bold shadow-2xs transition-all duration-150 active:scale-95 ${
+                              (isPushing || isPushingAll) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+                            }`}
                             title="Push data to server"
                           >
-                            <CloudLightning size={12} className="opacity-90" />
-                            <span>Push</span>
+                            {(isPushing || isPushingAll) ? <Loader2 size={12} className="animate-spin" /> : <CloudLightning size={12} className="opacity-90" />}
+                            <span>{(isPushing || isPushingAll) ? '...' : 'Push'}</span>
                           </button>
 
                           {/* Edit Button */}
@@ -307,7 +520,6 @@ export const AssessmentsPage: React.FC = () => {
                           </button>
                         </div>
                       </td>
-
                     </tr>
                   );
                 })
@@ -317,7 +529,7 @@ export const AssessmentsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* 🚨 ১. ডিলিট কনফার্মেশন মোডাল */}
+      {/* Modals */}
       {modalType === 'delete' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity" onClick={closeModal} />
@@ -355,7 +567,6 @@ export const AssessmentsPage: React.FC = () => {
         </div>
       )}
 
-      {/* 🌐 ২. অফলাইন পুশ অ্যালার্ট মোডাল */}
       {modalType === 'offline' && (
         <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl border border-slate-100 shadow-xl max-w-xs w-full p-5 space-y-4 text-center relative animate-in fade-in zoom-in-95 duration-150">
@@ -372,7 +583,6 @@ export const AssessmentsPage: React.FC = () => {
         </div>
       )}
 
-      {/* 🧹 ৩. সম্পূর্ণ ডাটাবেজ ক্লিয়ার মোডাল */}
       {modalType === 'clear_db' && (
         <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl border border-slate-100 shadow-xl max-w-xs w-full p-5 space-y-4 text-center relative animate-in fade-in zoom-in-95 duration-150">
@@ -391,19 +601,26 @@ export const AssessmentsPage: React.FC = () => {
         </div>
       )}
 
-      {/* 🎉 ৪. অল পুশ ডাটা সাকসেস মোডাল */}
+      {modalType === 'push_progress' && (
+        <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-xl max-w-xs w-full p-5 space-y-4 relative animate-in fade-in zoom-in-95 duration-150">
+            {renderPushProgress()}
+          </div>
+        </div>
+      )}
+
       {modalType === 'push_success' && (
         <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-xl max-w-xs w-full p-5 space-y-4 text-center relative animate-in fade-in zoom-in-95 duration-150">
-            <button onClick={closeModal} className="absolute top-3 right-3 text-slate-400 hover:text-slate-600 p-1 rounded-lg transition-colors cursor-pointer"><X size={15} /></button>
-            <div className="mx-auto w-11 h-11 bg-emerald-50 rounded-full flex items-center justify-center border border-emerald-100">
-              <CheckCircle2 size={20} className="text-emerald-500" />
-            </div>
-            <div className="space-y-1">
-              <h4 className="text-sm font-bold text-slate-900">Sync Successful</h4>
-              <p className="text-xs text-slate-500 leading-relaxed">Your secure assessment logs have been synced with the cloud repository.</p>
-            </div>
-            <button onClick={closeModal} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs py-2.5 rounded-xl transition-all active:scale-98 shadow-xs cursor-pointer">Awesome</button>
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-xl max-w-xs w-full p-5 space-y-4 relative animate-in fade-in zoom-in-95 duration-150">
+            {renderPushSuccess()}
+          </div>
+        </div>
+      )}
+
+      {modalType === 'push_failed' && (
+        <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-xl max-w-xs w-full p-5 space-y-4 relative animate-in fade-in zoom-in-95 duration-150">
+            {renderPushFailed()}
           </div>
         </div>
       )}
