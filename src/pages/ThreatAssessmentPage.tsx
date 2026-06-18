@@ -1,32 +1,42 @@
+// pages/ThreatAssessmentPage.tsx (আপডেটেড)
 import React, { useState, useEffect } from 'react';
 import { 
   ClipboardList, Plus, Edit2, Trash2, 
   AlertTriangle, ShieldCheck, ShieldAlert, Calendar, Search, X,
-  Zap, CloudLightning, WifiOff, CheckCircle2, Eye, Hash
+  Zap, CloudLightning, WifiOff, CheckCircle2, Eye, Hash, Loader2
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { threatAssessmentService } from '../services/threatAssessmentService';
+import { 
+  checkThreatAPIHealth, 
+  syncThreatAssessment, 
+  syncMultipleThreatAssessments 
+} from '../services/threatAssessmentApiForLive';
 import type { ThreatAssessment } from '../types/ThreatAssessment';
 
 export const ThreatAssessmentPage: React.FC = () => {
   const [assessments, setAssessments] = useState<ThreatAssessment[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isPushing, setIsPushing] = useState<boolean>(false);
+  const [isPushingAll, setIsPushingAll] = useState<boolean>(false);
+  const [pushingIds, setPushingIds] = useState<Set<number>>(new Set());
+  const [isOnline, setIsOnline] = useState<boolean>(true);
+  const [pushResults, setPushResults] = useState<Array<{ id: number; success: boolean; error?: string }>>([]);
   const navigate = useNavigate();
 
-  const [modalType, setModalType] = useState<'offline' | 'delete' | 'clear_db' | 'push_success' | 'none'>('none');
+  const [modalType, setModalType] = useState<'offline' | 'delete' | 'clear_db' | 'push_success' | 'push_failed' | 'push_progress' | 'none'>('none');
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [selectedAssessment, setSelectedAssessment] = useState<ThreatAssessment | null>(null);
-  const [syncStatus, setSyncStatus] = useState<{ syncing: boolean; lastSync: Date | null }>({
-    syncing: false,
-    lastSync: null
-  });
 
   const loadAssessments = async () => {
     setIsLoading(true);
     try {
       const data = await threatAssessmentService.getAllAssessments();
       setAssessments(data);
+      
+      const online = await checkThreatAPIHealth();
+      setIsOnline(online);
     } catch (error) {
       console.error('Error loading assessments:', error);
     } finally {
@@ -36,6 +46,13 @@ export const ThreatAssessmentPage: React.FC = () => {
 
   useEffect(() => {
     loadAssessments();
+    
+    const interval = setInterval(async () => {
+      const online = await checkThreatAPIHealth();
+      setIsOnline(online);
+    }, 30000);
+    
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -65,6 +82,7 @@ export const ThreatAssessmentPage: React.FC = () => {
     setModalType('none');
     setSelectedId(null);
     setSelectedAssessment(null);
+    setPushResults([]);
   };
 
   const confirmDelete = async () => {
@@ -85,7 +103,7 @@ export const ThreatAssessmentPage: React.FC = () => {
       const allAssessments = await threatAssessmentService.getAllAssessments();
       for (const assessment of allAssessments) {
         if (assessment.id) {
-          await threatAssessmentService.deleteAssessment(assessment.id);
+          await threatAssessmentService.hardDeleteAssessment(assessment.id);
         }
       }
       await loadAssessments();
@@ -97,22 +115,200 @@ export const ThreatAssessmentPage: React.FC = () => {
     }
   };
 
+  // 📤 একক রেকর্ড Push - LIVE API CALL
   const handlePushSingle = async (id: number, e: React.MouseEvent) => {
     e.stopPropagation();
-    const assessment = assessments.find(a => a.id === id);
-    if (!assessment) return;
+    
+    const online = await checkThreatAPIHealth();
+    if (!online) {
+      setModalType('offline');
+      return;
+    }
 
-    setSyncStatus(prev => ({ ...prev, syncing: true }));
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    console.log('Pushing assessment to server:', assessment);
-    setModalType('push_success');
+    setPushingIds(prev => new Set(prev).add(id));
+
+    try {
+      const record = await threatAssessmentService.getAssessmentById(id);
+      if (!record) {
+        throw new Error('Record not found');
+      }
+      
+      const caseNumber = record.caseNumber || `THREAT-${id}`;
+      const result = await syncThreatAssessment(caseNumber, record);
+      
+      setPushResults([{ id, success: result.success, error: result.success ? undefined : result.message }]);
+      
+      if (result.success) {
+        setModalType('push_success');
+      } else {
+        setModalType('push_failed');
+      }
+    } catch (error) {
+      setPushResults([{ id, success: false, error: 'Failed to push' }]);
+      setModalType('push_failed');
+    } finally {
+      setPushingIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(id);
+        return newSet;
+      });
+    }
   };
 
+  // 📤 সব রেকর্ড Push - LIVE API CALL
   const handlePushAll = async () => {
-    setSyncStatus(prev => ({ ...prev, syncing: true }));
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    console.log('Pushing all assessments to server:', assessments);
-    setModalType('push_success');
+    const online = await checkThreatAPIHealth();
+    if (!online) {
+      setModalType('offline');
+      return;
+    }
+
+    const records = await threatAssessmentService.getAllAssessments();
+    if (records.length === 0) {
+      alert('No assessments to push!');
+      return;
+    }
+
+    setModalType('push_progress');
+    setIsPushingAll(true);
+
+    try {
+      const assessmentsForApi = records.map(record => ({
+        ...record,
+        caseNumber: record.caseNumber || `THREAT-${record.id}`
+      }));
+
+      const result = await syncMultipleThreatAssessments(assessmentsForApi);
+      
+      const results = result.results.map((r, index) => ({
+        id: records[index]?.id || 0,
+        success: r.success,
+        error: r.error
+      }));
+      
+      setPushResults(results);
+      
+      if (result.success) {
+        setModalType('push_success');
+      } else {
+        setModalType('push_failed');
+      }
+    } catch (error) {
+      setModalType('push_failed');
+    } finally {
+      setIsPushingAll(false);
+    }
+  };
+
+  // Push Progress Modal Content
+  const renderPushProgress = () => (
+    <div className="space-y-4 text-center">
+      <div className="mx-auto w-11 h-11 bg-blue-50 rounded-full flex items-center justify-center border border-blue-100">
+        <Loader2 size={20} className="text-blue-500 animate-spin" />
+      </div>
+      <div className="space-y-1">
+        <h4 className="text-sm font-bold text-slate-900">Pushing to Server...</h4>
+        <p className="text-xs text-slate-500 leading-relaxed">
+          Please wait while the threat assessment data is being synced to the server.
+        </p>
+        <p className="text-[10px] text-slate-400">Check console for payload details</p>
+      </div>
+      <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+        <div className="bg-blue-600 h-full rounded-full animate-pulse w-full"></div>
+      </div>
+    </div>
+  );
+
+  // Push Success Modal Content
+  const renderPushSuccess = () => {
+    const successCount = pushResults.filter(r => r.success).length;
+    const totalCount = pushResults.length;
+    
+    return (
+      <div className="space-y-3">
+        <div className="mx-auto w-11 h-11 bg-emerald-50 rounded-full flex items-center justify-center border border-emerald-100">
+          <CheckCircle2 size={20} className="text-emerald-500" />
+        </div>
+        <div className="space-y-1">
+          <h4 className="text-sm font-bold text-slate-900">Sync Successful! 🎉</h4>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            {totalCount === 0 
+              ? 'All threat assessments have been successfully synced to the server.'
+              : `${successCount} out of ${totalCount} threat assessment records synced successfully.`
+            }
+          </p>
+          <p className="text-[10px] text-slate-400">
+            📤 Check console for complete payload details
+          </p>
+        </div>
+        {pushResults.length > 0 && (
+          <div className="max-h-32 overflow-y-auto bg-slate-50 rounded-lg p-2 text-left border border-slate-200">
+            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Sync Results:</p>
+            {pushResults.map((result, idx) => (
+              <div key={idx} className="text-[10px] font-medium flex items-center gap-2 py-1 border-b border-slate-100 last:border-0">
+                <span className={result.success ? 'text-emerald-600' : 'text-red-500'}>
+                  {result.success ? '✅' : '❌'}
+                </span>
+                <span className="text-slate-600">ID: {result.id}</span>
+                {result.error && <span className="text-red-400 text-[9px]">{result.error}</span>}
+              </div>
+            ))}
+          </div>
+        )}
+        <button onClick={closeModal} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs py-2.5 rounded-xl transition-all active:scale-98 shadow-xs cursor-pointer">
+          Awesome! 👏
+        </button>
+      </div>
+    );
+  };
+
+  // Push Failed Modal Content
+  const renderPushFailed = () => {
+    const failedCount = pushResults.filter(r => !r.success).length;
+    
+    return (
+      <div className="space-y-3">
+        <div className="mx-auto w-11 h-11 bg-red-50 rounded-full flex items-center justify-center border border-red-100">
+          <AlertTriangle size={20} className="text-red-500" />
+        </div>
+        <div className="space-y-1">
+          <h4 className="text-sm font-bold text-slate-900">Push Failed! 😕</h4>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            {pushResults.length === 0 
+              ? 'Failed to push threat assessments to server. Please check your connection and try again.'
+              : `${failedCount} out of ${pushResults.length} records failed to sync.`
+            }
+          </p>
+        </div>
+        {pushResults.some(r => r.error) && (
+          <div className="bg-red-50 border border-red-100 rounded-lg p-2 text-left max-h-24 overflow-y-auto">
+            <p className="text-[9px] font-bold text-red-400 uppercase tracking-wider mb-1">Errors:</p>
+            {pushResults.filter(r => r.error).map((result, idx) => (
+              <div key={idx} className="text-[10px] text-red-600 py-1 border-b border-red-100 last:border-0">
+                ID: {result.id} - {result.error}
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="flex items-center gap-2 pt-1">
+          <button onClick={closeModal} className="w-1/2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs py-2.5 rounded-xl transition-all active:scale-98 cursor-pointer">
+            Close
+          </button>
+          <button 
+            onClick={() => {
+              if (selectedId) {
+                handlePushSingle(selectedId, {} as React.MouseEvent);
+              } else {
+                handlePushAll();
+              }
+            }} 
+            className="w-1/2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs py-2.5 rounded-xl transition-all active:scale-98 shadow-xs cursor-pointer"
+          >
+            Retry 🔄
+          </button>
+        </div>
+      </div>
+    );
   };
 
   const filteredAssessments = assessments.filter(item => {
@@ -188,21 +384,28 @@ export const ThreatAssessmentPage: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
-          {syncStatus.lastSync && (
-            <span className="text-[10px] text-slate-400 bg-slate-100 px-2 py-1 rounded-full">
-              Last sync: {syncStatus.lastSync.toLocaleTimeString()}
-            </span>
-          )}
           
+          {/* Connection Status */}
+          <span className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-bold border ${
+            isOnline ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-red-50 border-red-200 text-red-700'
+          }`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
+            {isOnline ? '🟢 Online' : '🔴 Offline'}
+          </span>
+          
+          {/* All Data Push Button */}
           <button
             onClick={handlePushAll}
-            disabled={syncStatus.syncing || assessments.length === 0}
-            className="flex items-center gap-1.5 bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 text-white px-3 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 active:scale-95 shadow-2xs cursor-pointer disabled:opacity-50"
+            disabled={isPushingAll}
+            className={`flex items-center gap-1.5 bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 text-white px-3 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 active:scale-95 shadow-2xs ${
+              isPushingAll ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+            }`}
           >
-            <Zap size={14} />
-            <span>{syncStatus.syncing ? 'Syncing...' : 'All Data Push'}</span>
+            {isPushingAll ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
+            <span>{isPushingAll ? 'Pushing...' : 'All Data Push'}</span>
           </button>
 
+          {/* Clear DB Button */}
           <button
             onClick={() => setModalType('clear_db')}
             className="flex items-center gap-1.5 border border-red-200/80 text-red-600 hover:text-red-700 bg-white hover:bg-red-50/60 px-3 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 active:scale-95 shadow-2xs cursor-pointer"
@@ -211,6 +414,7 @@ export const ThreatAssessmentPage: React.FC = () => {
             <span>Clear DB</span>
           </button>
 
+          {/* New Assessment Button */}
           <button 
             onClick={() => navigate('/add-threat')}
             className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-md shadow-blue-600/10 transition-all active:scale-95 cursor-pointer"
@@ -289,7 +493,7 @@ export const ThreatAssessmentPage: React.FC = () => {
                 <th className="p-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Date Completed</th>
                 <th className="p-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center">Status</th>
                 <th className="p-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center w-72">Actions</th>
-               </tr>
+              </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {isLoading ? (
@@ -309,6 +513,8 @@ export const ThreatAssessmentPage: React.FC = () => {
                 </tr>
               ) : (
                 filteredAssessments.map((item) => {
+                  const isPushing = pushingIds.has(item.id || 0);
+                  
                   return (
                     <tr key={item.id} className="hover:bg-slate-50/40 transition-colors group">
                       
@@ -319,7 +525,7 @@ export const ThreatAssessmentPage: React.FC = () => {
                           </div>
                           <div>
                             <span className="text-xs font-black text-slate-900 tracking-tight">
-                              {item.caseNumber ? item.caseNumber : ``}
+                              {item.caseNumber || ''}
                             </span>
                           </div>
                         </div>
@@ -367,15 +573,18 @@ export const ThreatAssessmentPage: React.FC = () => {
                       <td className="p-4 whitespace-nowrap text-center">
                         <div className="flex items-center justify-center gap-2">
                           
+                          {/* Push Button */}
                           <button
                             type="button"
-                            onClick={(e) => handlePushSingle(item.id!, e)}
-                            disabled={syncStatus.syncing}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-600 rounded-lg text-[11px] font-medium transition-all duration-150 active:scale-95 cursor-pointer disabled:opacity-50"
+                            onClick={(e) => item.id && handlePushSingle(item.id, e)}
+                            disabled={isPushing || isPushingAll}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-600 rounded-lg text-[11px] font-medium transition-all duration-150 active:scale-95 ${
+                              (isPushing || isPushingAll) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+                            }`}
                             title="Push data to server"
                           >
-                            <CloudLightning size={12} />
-                            <span>Push</span>
+                            {(isPushing || isPushingAll) ? <Loader2 size={12} className="animate-spin" /> : <CloudLightning size={12} />}
+                            <span>{(isPushing || isPushingAll) ? '...' : 'Push'}</span>
                           </button>
 
                           {item.isCompleted ? (
@@ -420,29 +629,25 @@ export const ThreatAssessmentPage: React.FC = () => {
         </div>
       </div>
 
-      {/* --- CLEAN & CLEAN DELETE CONFIRMATION MODAL --- */}
+      {/* Modals */}
       {modalType === 'delete' && selectedAssessment && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-950/40  transition-opacity duration-200" onClick={closeModal} />
+          <div className="fixed inset-0 bg-slate-950/40 transition-opacity duration-200" onClick={closeModal} />
           
           <div className="relative bg-white rounded-2xl shadow-xl max-w-sm w-full overflow-hidden transform transition-all p-6 text-center animate-in fade-in zoom-in-95 duration-150">
-            {/* Close Accent Cross */}
             <button onClick={closeModal} className="absolute top-4 right-4 p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
               <X size={16} />
             </button>
 
-            {/* Warning Trash Icon Center */}
             <div className="w-12 h-12 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-3.5">
               <Trash2 size={22} className="text-rose-600" />
             </div>
 
-            {/* Modal Heading & Description */}
             <h3 className="text-base font-extrabold text-slate-900 tracking-tight">Delete Assessment?</h3>
             <p className="text-xs text-slate-500 mt-1 px-2">
               Are you sure you want to permanently delete {selectedAssessment.caseNumber ? <>Case <span className="font-bold text-slate-700">#{selectedAssessment.caseNumber}</span></> : 'this record'}? This action cannot be undone.
             </p>
 
-            {/* Action Buttons Row */}
             <div className="flex items-center gap-2 mt-5">
               <button 
                 type="button" 
@@ -466,7 +671,7 @@ export const ThreatAssessmentPage: React.FC = () => {
       {/* Clear Database Modal */}
       {modalType === 'clear_db' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-900/50 " onClick={closeModal} />
+          <div className="fixed inset-0 bg-slate-900/50" onClick={closeModal} />
           <div className="relative bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden transform transition-all duration-200">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-red-50 to-white">
               <div className="flex items-center gap-3">
@@ -500,36 +705,46 @@ export const ThreatAssessmentPage: React.FC = () => {
         </div>
       )}
 
+      {/* Push Progress Modal */}
+      {modalType === 'push_progress' && (
+        <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-xl max-w-xs w-full p-5 space-y-4 relative animate-in fade-in zoom-in-95 duration-150">
+            {renderPushProgress()}
+          </div>
+        </div>
+      )}
+
       {/* Push Success Modal */}
       {modalType === 'push_success' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-900/50 " onClick={closeModal} />
-          <div className="relative bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden transform transition-all duration-200">
-            <div className="px-6 py-5 text-center">
-              <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <CheckCircle2 size={32} className="text-emerald-500" />
-              </div>
-              <h4 className="text-lg font-bold text-slate-900 mb-2">Sync Successful!</h4>
-              <p className="text-sm text-slate-500">Your secure threat assessment logs have been synced with the cloud repository.</p>
-              <button onClick={closeModal} className="mt-5 w-full px-4 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-emerald-600 to-emerald-700 rounded-xl shadow-md">Continue</button>
-            </div>
+        <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-xl max-w-xs w-full p-5 space-y-4 relative animate-in fade-in zoom-in-95 duration-150">
+            {renderPushSuccess()}
+          </div>
+        </div>
+      )}
+
+      {/* Push Failed Modal */}
+      {modalType === 'push_failed' && (
+        <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-xl max-w-xs w-full p-5 space-y-4 relative animate-in fade-in zoom-in-95 duration-150">
+            {renderPushFailed()}
           </div>
         </div>
       )}
 
       {/* Offline Push Alert Modal */}
       {modalType === 'offline' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={closeModal} />
-          <div className="relative bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden transform transition-all duration-200">
-            <div className="px-6 py-5 text-center">
-              <div className="w-16 h-16 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <WifiOff size={32} className="text-amber-500" />
-              </div>
-              <h4 className="text-lg font-bold text-slate-900 mb-2">No Internet Connection</h4>
-              <p className="text-sm text-slate-500 mb-4">Please connect to WiFi or mobile data to sync your data to the cloud.</p>
-              <button onClick={closeModal} className="w-full px-4 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-slate-700 to-slate-800 rounded-xl shadow-md">Got it</button>
+        <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-xl max-w-xs w-full p-5 space-y-4 text-center relative animate-in fade-in zoom-in-95 duration-150">
+            <button onClick={closeModal} className="absolute top-3 right-3 text-slate-400 hover:text-slate-600 p-1 rounded-lg transition-colors cursor-pointer"><X size={15} /></button>
+            <div className="mx-auto w-11 h-11 bg-red-50 rounded-full flex items-center justify-center border border-red-100">
+              <WifiOff size={20} className="text-red-500" />
             </div>
+            <div className="space-y-1">
+              <h4 className="text-sm font-bold text-slate-900">Connection Offline</h4>
+              <p className="text-xs text-slate-500 leading-relaxed">Please connect your wifi or internet connection for push data.</p>
+            </div>
+            <button onClick={closeModal} className="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs py-2.5 rounded-xl transition-all active:scale-98 cursor-pointer">Okay, Got it</button>
           </div>
         </div>
       )}
