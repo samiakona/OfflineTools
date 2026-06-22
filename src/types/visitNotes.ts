@@ -3,7 +3,9 @@ export interface VisitNotesData {
   date: string;
   time: string;
   caseNumber: string;
-  children: string;
+  firstName: string;
+  lastName: string;
+
   concernsAppointments: string;
   appointmentType: 'Email' | 'Face to Face' | 'letter' | 'N/A' | 'Note to file' | 'phone' | 'Stuffing' | 'Text' | 'Virtual';
   babyProgramsGrowth: string;
@@ -32,4 +34,6 @@ export interface VisitNotesData {
   isCompleted: boolean;
   createdAt?: string;
   updatedAt?: string;
+  familyName: string;
+
 }

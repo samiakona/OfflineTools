@@ -49,7 +49,10 @@ export const NoteList: React.FC = () => {
   const [modalType, setModalType] = useState<'offline' | 'delete' | 'clear_db' | 'push_success' | 'none'>('none');
   const [selectedNoteId, setSelectedNoteId] = useState<number | null>(null);
 
-  const { syncProgress, syncNote, syncAllLocalNotes, checkAPI } = useCaseNoteSync();
+  const { syncProgress, syncNote, syncAllLocalNotes, checkAPI, getConfig } = useCaseNoteSync();
+
+  // Fixed login ID - you can get this from context or local storage
+  const loginId = '3';
 
   // 🟢 ১. উইন্ডোজ ক্যাশ এবং মেমরি পুরোপুরি ফ্রেশ করার জন্য হার্ড রিলোড ফাংশন
   const handleHardRefresh = () => {
@@ -211,6 +214,23 @@ export const NoteList: React.FC = () => {
   const currentItems = filteredNotes.slice(indexOfFirstItem, indexOfLastItem);
   const totalPages = Math.ceil(filteredNotes.length / itemsPerPage);
 
+  // Get client type label
+  const getClientTypeLabel = (clientType: string | undefined) => {
+    if (clientType === '0') return '👶 Child';
+    if (clientType === '1') return '👨‍👩 Parent';
+    if (clientType === '2') return '👤 Other';
+    if (clientType === '3') return '👥 Group';
+    return '—';
+  };
+
+  // Get service type label
+  const getServiceTypeLabel = (serviceType: string | undefined) => {
+    return SERVICE_TYPE_LABELS[serviceType || ''] || serviceType || 'N/A';
+  };
+
+  // Get API config for debugging
+  const apiConfig = getConfig();
+
   return (
     <div className="space-y-6 max-w-[1600px] mx-auto p-2 sm:p-4 relative">
       
@@ -219,6 +239,11 @@ export const NoteList: React.FC = () => {
         <div>
           <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">Case Notes</h2>
           <p className="text-[11px] sm:text-xs font-medium text-slate-500 mt-0.5">Overview and auditing of active child welfare records.</p>
+          {/* API Config - Debug info (optional) */}
+          <p className="text-[9px] text-slate-400 mt-0.5">
+            API: {apiConfig.mockMode ? '🔮 Mock Mode' : '🌐 Live Mode'} | 
+            Endpoint: {apiConfig.endpoint}
+          </p>
         </div>
         
         {/* Buttons */}
@@ -267,7 +292,7 @@ export const NoteList: React.FC = () => {
 
           {/* Add Note Button */}
           <button
-            onClick={() => navigate('/add-note')}
+            onClick={() => navigate('/add-note', { state: { loginId } })}
             className="flex items-center gap-1.5 sm:gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-3.5 py-2 sm:px-4.5 rounded-xl text-xs font-semibold transition-all duration-200 active:scale-95 shadow-md shadow-blue-600/10 cursor-pointer"
           >
             <Plus size={15} strokeWidth={2.5} />
@@ -315,11 +340,7 @@ export const NoteList: React.FC = () => {
               >
                 <div className="p-4 pb-3 border-b border-slate-100/80 flex justify-between items-center bg-slate-50/40">
                   <span className="inline-flex items-center gap-1 bg-purple-50 text-purple-700 font-bold text-[10px] uppercase tracking-wider px-2.5 py-1 rounded-lg border border-purple-100/60">
-                    {note.clientType === '0' ? '👶 Child' : 
-                     note.clientType === '1' ? '👨‍👩 Parent' : 
-                     note.clientType === '2' ? '👤 Other' : 
-                     note.clientType === '3' ? '👥 Group' : 
-                     (SERVICE_TYPE_LABELS[note.serviceType] || note.serviceType || 'N/A')}
+                    {getClientTypeLabel(note.clientType)}
                   </span>
                   
                   <div className="flex items-center gap-1.5">
@@ -338,7 +359,7 @@ export const NoteList: React.FC = () => {
                     
                     {/* Edit Button - Mobile */}
                     <button
-                      onClick={() => note.id !== undefined && navigate(`/edit-note/${note.id}`)}
+                      onClick={() => note.id !== undefined && navigate(`/edit-note/${note.id}`, { state: { loginId } })}
                       className="p-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-xl active:scale-90 transition-all cursor-pointer"
                       title="Edit"
                     >
@@ -390,7 +411,7 @@ export const NoteList: React.FC = () => {
                   <div className="pt-2 border-t border-slate-100">
                     <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Service Type</span>
                     <p className="text-xs font-medium text-slate-600 mt-0.5">
-                      {SERVICE_TYPE_LABELS[note.serviceType] || note.serviceType || 'N/A'}
+                      {getServiceTypeLabel(note.serviceType)}
                     </p>
                   </div>
                 </div>
@@ -435,10 +456,7 @@ export const NoteList: React.FC = () => {
                     
                     <td className="p-4">
                       <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] font-bold tracking-wide bg-purple-50 text-purple-700 border border-purple-100">
-                        {note.clientType === '0' ? '👶 Child' : 
-                         note.clientType === '1' ? '👨‍👩 Parent' : 
-                         note.clientType === '2' ? '👤 Other' : 
-                         note.clientType === '3' ? '👥 Group' : '—'}
+                        {getClientTypeLabel(note.clientType)}
                       </span>
                     </td>
                     
@@ -453,7 +471,7 @@ export const NoteList: React.FC = () => {
                     
                     <td className="p-4">
                       <span className="inline-flex items-center bg-slate-100/80 group-hover:bg-slate-200/50 text-slate-700 px-2.5 py-1 rounded-lg font-bold text-[10px] tracking-wide border border-slate-200/30 transition-colors">
-                        {SERVICE_TYPE_LABELS[note.serviceType] || note.serviceType || 'N/A'}
+                        {getServiceTypeLabel(note.serviceType)}
                       </span>
                     </td>
                     
@@ -485,7 +503,7 @@ export const NoteList: React.FC = () => {
                         </button>
 
                         <button
-                          onClick={() => note.id !== undefined && navigate(`/edit-note/${note.id}`)}
+                          onClick={() => note.id !== undefined && navigate(`/edit-note/${note.id}`, { state: { loginId } })}
                           className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 hover:text-blue-600 rounded-xl text-[11px] font-semibold shadow-2xs transition-all duration-150 active:scale-95 cursor-pointer"
                         >
                           <Edit3 size={12} className="opacity-80" />

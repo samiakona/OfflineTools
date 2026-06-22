@@ -1,3 +1,4 @@
+// types/caseNote.ts
 export interface CaseNote {
   id?: number;
   date: string;
@@ -13,7 +14,7 @@ export interface CaseNote {
   durationMinutes: number;
   caseName: string;
   narrative: string;
-  teamMember: string;
+  teamMember?: string; // ✅ Optional করে দিন
   otherAttendees?: string;
   notifyTeam: boolean;
   isCompleted: boolean;
@@ -21,11 +22,14 @@ export interface CaseNote {
   createdAt: number;
   updatedBy: string;
   updatedAt: number;
-  // নতুন ফিল্ড
-  clientType?: string;      // '0'=Child, '1'=Parent, '2'=Other, '3'=Group
+  clientType?: string;
   clientId?: string;
-  clientName?: string;      // Selected child/parent name
+  clientName?: string;
+  parentNames?: string[];
+  childNames?: string[];
+  caseId?: string;
 }
+
 // ফর্ম ডেটার জন্য আলাদা টাইপ
 export interface CaseNoteFormData {
   date: string;
@@ -41,12 +45,28 @@ export interface CaseNoteFormData {
   durationMinutes: number;
   caseName: string;
   narrative: string;
-  teamMember: string;
+  teamMember?: string;
   otherAttendees?: string;
   notifyTeam: boolean;
   isCompleted: boolean;
-  // নতুন ফিল্ড (শুধু ফর্মের জন্য)
-  clientType?: string;
+  clientType: string;
   clientId?: string;
   clientName?: string;
+  selectedCase?: string;
+  parentNames?: string[];
+  childNames?: string[];
+  caseId?: string;
+}
+
+export interface CasePerson {
+  id: string | number;
+  name: string;
+}
+
+export interface CaseData {
+  id: string;
+  caseName: string;
+  parents: CasePerson[];
+  children: CasePerson[];
+  isGroup: boolean;
 }

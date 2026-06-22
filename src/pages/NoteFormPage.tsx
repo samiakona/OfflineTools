@@ -1,14 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { 
   ArrowLeft, User, Calendar, Bell, ShieldCheck, 
   Check, Layers, Clock, MapPin, Briefcase, 
-  ListPlus, Users, Phone, UserCheck 
+  ListPlus, Users, Phone, UserCheck,
+  Wifi, WifiOff, ChevronDown
 } from 'lucide-react';
 import type { CaseNoteFormData } from '../types/caseNote';
 import { CustomSelect } from '../components/Common/CustomSelect';
+import { MultiSelectInput } from '../components/Common/MultiSelectInput';
 import { caseNoteService } from '../services/caseNoteService';
-import toast from 'react-hot-toast'; // 🟢 ১. react-hot-toast ইমপোর্ট করা হয়েছে
+import { useCaseList } from '../hooks/useCaseList';
+import { useTeamMembers } from '../hooks/useTeamMembers';
+import toast from 'react-hot-toast';
 
 // Enums and Lookup Data
 const CLIENT_TYPES = [
@@ -58,7 +62,7 @@ const LOCATIONS = [
   { value: '15', label: 'Child Support' },
   { value: '16', label: 'Enrollment' },
   { value: '17', label: 'Food Stamps' },
-  { value: '18', border: 'Community Visit', label: 'Community Visit' },
+  { value: '18', label: 'Community Visit' },
   { value: '19', label: 'Other' }
 ];
 
@@ -104,8 +108,33 @@ const TIME_OPTIONS = (() => {
 
 export const NoteFormPage: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { id } = useParams<{ id: string }>(); 
   const isEditMode = Boolean(id);
+  
+  // Get loginId from location state or default to '1'
+  const loginId = (location.state as any)?.loginId || '1';
+
+  // 🟢 Online/Offline State
+  const [isOnline, setIsOnline] = useState<boolean | undefined>(undefined);
+  const [isFirstCheckDone, setIsFirstCheckDone] = useState<boolean>(false);
+
+  // 🟢 Case List Hook
+  const { 
+    cases, 
+    isLoading: casesLoading, 
+    fetchCases, 
+    fetchCaseDetails,
+    getCaseById,
+    getAllParents,
+    getAllChildren,
+    getParentsByCase,
+    getChildrenByCase
+  } = useCaseList(loginId);
+  useEffect(() => {}, [getCaseById]); // For debugging case data changes
+  
+  // 🟢 Team Members Hook
+  const { members: teamMembers, isLoading: teamMembersLoading } = useTeamMembers(isOnline || false);
 
   const [formData, setFormData] = useState<CaseNoteFormData>({
     date: new Date().toISOString().split('T')[0],
@@ -128,9 +157,116 @@ export const NoteFormPage: React.FC = () => {
     clientType: '2', 
     clientId: '',
     clientName: '',
+    selectedCase: '',
+    parentNames: [],
+    childNames: [],
   });
 
   const [auditData, setAuditData] = useState<{ createdBy: string; createdAt: number; updatedBy: string; updatedAt: number } | null>(null);
+
+  // 🟢 Network check function
+  const checkNetworkStatus = async (): Promise<boolean> => {
+    try {
+      const endpoints = [
+        'https://cdn.jsdelivr.net/npm/package.json',
+        'https://unpkg.com/package.json'
+      ];
+
+      for (const endpoint of endpoints) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 1500);
+          
+          const response = await fetch(endpoint, {
+            method: 'HEAD',
+            cache: 'no-cache',
+            signal: controller.signal
+          });
+          
+          clearTimeout(timeoutId);
+          
+          if (response.ok || response.status === 200) {
+            setIsOnline(true);
+            setIsFirstCheckDone(true);
+            return true;
+          }
+        } catch (err) {
+          continue;
+        }
+      }
+
+      setIsOnline(false);
+      setIsFirstCheckDone(true);
+      return false;
+
+    } catch (error) {
+      console.error('Network check error:', error);
+      setIsOnline(false);
+      setIsFirstCheckDone(true);
+      return false;
+    }
+  };
+
+  // 🟢 Network monitoring
+  useEffect(() => {
+    const performInitialCheck = async () => {
+      const initialStatus = navigator.onLine;
+      setIsOnline(initialStatus);
+      await checkNetworkStatus();
+    };
+
+    performInitialCheck();
+
+    const intervalId = setInterval(() => {
+      checkNetworkStatus();
+    }, 3000);
+
+    const handleOnline = () => {
+      setIsOnline(true);
+      setIsFirstCheckDone(true);
+      toast.success('🔄 Connection restored!', {
+        duration: 2000,
+        style: {
+          background: '#22c55e',
+          color: '#fff',
+          borderRadius: '12px',
+          fontSize: '13px',
+          fontWeight: 'bold',
+        }
+      });
+    };
+
+    const handleOffline = () => {
+      setIsOnline(false);
+      setIsFirstCheckDone(true);
+      toast.error('📡 You are offline. Please check your connection.', {
+        duration: 3000,
+        style: {
+          background: '#ef4444',
+          color: '#fff',
+          borderRadius: '12px',
+          fontSize: '13px',
+          fontWeight: 'bold',
+        }
+      });
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      clearInterval(intervalId);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // 🟢 Fetch cases when online
+  useEffect(() => {
+    if (isOnline) {
+      fetchCases();
+    }
+  }, [isOnline]);
 
   const timeOptions = (() => {
     const times = [];
@@ -158,17 +294,61 @@ export const NoteFormPage: React.FC = () => {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  // ✅ Case select handler
+  const handleCaseSelect = async (caseName: string) => {
+    updateField('caseName', caseName);
+    updateField('selectedCase', caseName);
+    
+    // Default selected case from state
+    let selectedCase = getCaseById(caseName);
+
+    // If online, always try to fetch fresh details to get parents and children
+    if (isOnline) {
+      const details = await fetchCaseDetails(caseName);
+      if (details) {
+        selectedCase = details;
+      }
+    }
+
+    if (selectedCase) {
+      updateField('caseId', selectedCase.id);
+      
+      // Set client type based on selected case
+      if (selectedCase.isGroup) {
+        updateField('clientType', '3'); // Group
+        updateField('parentNames', selectedCase.parents?.map(p => p.name) || []);
+        updateField('childNames', selectedCase.children?.map(c => c.name) || []);
+        updateField('clientName', '');
+        updateField('clientId', '');
+      } else {
+        // Parent or Child case
+        if (selectedCase.parents && selectedCase.parents.length > 0) {
+          updateField('clientType', '1'); // Parent
+          updateField('parentNames', selectedCase.parents.map(p => p.name));
+          updateField('childNames', []);
+          updateField('clientName', selectedCase.parents.map(p => p.name).join(', '));
+          updateField('clientId', String(selectedCase.parents[0].id) || '');
+        } else if (selectedCase.children && selectedCase.children.length > 0) {
+          updateField('clientType', '0'); // Child
+          updateField('childNames', selectedCase.children.map(c => c.name));
+          updateField('parentNames', []);
+          updateField('clientName', selectedCase.children.map(c => c.name).join(', '));
+          updateField('clientId', String(selectedCase.children[0].id) || '');
+        }
+      }
+    }
+  };
+
   const handleClientTypeChange = (value: string) => {
     updateField('clientType', value);
     updateField('clientId', '');
     updateField('clientName', '');
+    // Reset fields based on type
+    if (value !== '0') updateField('childNames', []);
+    if (value !== '1') updateField('parentNames', []);
   };
 
-  const handleClientNameChange = (value: string) => {
-    updateField('clientName', value);
-    updateField('clientId', value); 
-  };
-
+  // Load note data for edit mode
   useEffect(() => {
     if (isEditMode && id) {
       caseNoteService.getNoteById(Number(id)).then((note) => {
@@ -197,22 +377,58 @@ export const NoteFormPage: React.FC = () => {
             notifyTeam: rest.notifyTeam !== undefined ? String(rest.notifyTeam) === 'true' : false, 
             durationMinutes: rest.durationMinutes || 60,
             isCompleted: safeIsCompleted, 
-            teamMember: rest.teamMember || '', 
+            teamMember: rest.teamMember || '',
+            selectedCase: rest.caseName || '',
+            parentNames: rest.parentNames || [],
+            childNames: rest.childNames || [],
           });
+
+          // If online, try to load case data
+          if (isOnline && rest.caseName) {
+            const caseData = getCaseById(rest.caseName);
+            if (caseData) {
+              if (caseData.isGroup) {
+                updateField('parentNames', caseData.parents?.map(p => p.name) || []);
+                updateField('childNames', caseData.children?.map(c => c.name) || []);
+              } else {
+                if (caseData.parents && caseData.parents.length > 0) {
+                  updateField('parentNames', caseData.parents.map(p => p.name));
+                }
+                if (caseData.children && caseData.children.length > 0) {
+                  updateField('childNames', caseData.children.map(c => c.name));
+                }
+              }
+            }
+          }
+
           setAuditData({ createdBy, createdAt, updatedBy, updatedAt });
         }
       });
     }
-  }, [id, isEditMode]);
+  }, [id, isEditMode, isOnline]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const currentOperator = formData.teamMember || 'System_Operator';
 
+    // Prepare client name from parentNames or childNames
+    let clientName = formData.clientName;
+    if (formData.clientType === '0' && formData.childNames && formData.childNames.length > 0) {
+      clientName = formData.childNames.join(', ');
+    } else if (formData.clientType === '1' && formData.parentNames && formData.parentNames.length > 0) {
+      clientName = formData.parentNames.join(', ');
+    } else if (formData.clientType === '3') {
+      const allNames = [
+        ...(formData.parentNames || []),
+        ...(formData.childNames || [])
+      ];
+      clientName = allNames.join(', ') || 'Group';
+    }
+
     const noteToSave = {
       date: formData.date,
       time: formData.time,
-      childName: formData.clientName || formData.childName,
+      childName: clientName || formData.childName,
       appointmentStatus: formData.appointmentStatus,
       nextAppointmentDate: formData.nextAppointmentDate,
       nextAppointmentTime: formData.nextAppointmentTime,
@@ -222,6 +438,7 @@ export const NoteFormPage: React.FC = () => {
       additionalServices: formData.additionalServices,
       durationMinutes: formData.durationMinutes,
       caseName: formData.caseName,
+      caseId: formData.caseId || (getCaseById(formData.caseName) ? getCaseById(formData.caseName)?.id : ''),
       narrative: formData.narrative,
       teamMember: formData.teamMember,
       otherAttendees: formData.otherAttendees,
@@ -229,16 +446,18 @@ export const NoteFormPage: React.FC = () => {
       isCompleted: formData.isCompleted,
       clientType: formData.clientType,
       clientId: formData.clientId,
-      clientName: formData.clientName,
+      clientName: clientName,
+      parentNames: formData.parentNames,
+      childNames: formData.childNames,
     };
 
     console.log('💾 Saving note with Case Name:', noteToSave.caseName);
+    console.log('💾 Client Name:', noteToSave.clientName);
 
     try {
       if (isEditMode && id) {
         await caseNoteService.updateNote(Number(id), noteToSave, currentOperator);
         
-        // 🟢 ২. সুন্দর টোস্ট অ্যালার্ট (আপডেট সাকসেস)
         toast.success('Case note updated successfully!', {
           duration: 3000,
           style: {
@@ -260,7 +479,6 @@ export const NoteFormPage: React.FC = () => {
           isCompleted: false
         }));
 
-        // 🟢 ৩. সুন্দর টোস্ট অ্যালার্ট (ক্রিয়েট সাকসেস)
         toast.success('Case note created successfully!', {
           duration: 3000,
           style: {
@@ -276,12 +494,11 @@ export const NoteFormPage: React.FC = () => {
         setTimeout(() => {
           localStorage.setItem('note_submitted', 'true');
           navigate('/', { replace: true });
-        }, 150); // উইন্ডোজ ক্যাশ রিলিজের ট্রিকটা ঠিক রাখার জন্য স্লাইট ডিলে বাড়ানো হয়েছে যাতে টোস্ট ইমপ্যাক্ট পাওয়া যায়
+        }, 150);
       }
     } catch (error) {
       console.error("❌ Failed to save case note:", error);
       
-      // 🟢 ৪. এরর মেসেজের জন্য টোস্ট অ্যালার্ট
       toast.error('An error occurred while saving the document.', {
         style: {
           borderRadius: '12px',
@@ -295,6 +512,283 @@ export const NoteFormPage: React.FC = () => {
   const isReadOnly = 
     formData.isCompleted === true || 
     String(formData.isCompleted).toLowerCase() === 'true';
+
+  const showStatus = isFirstCheckDone;
+
+  // ✅ Render client fields based on type and online status
+  const renderClientFields = () => {
+    const clientType = formData.clientType;
+    const isGroup = clientType === '3';
+
+    // ✅ ONLINE: Show dropdown with options
+    if (isOnline) {
+      if (isGroup) {
+        // Get all parents and children from all cases - ensure arrays
+        let parentPersons = getAllParents() || [];
+        let childPersons = getAllChildren() || [];
+        
+        // If a case is selected, filter options for that case
+        if (formData.selectedCase) {
+          const caseParents = getParentsByCase(formData.selectedCase) || [];
+          const caseChildren = getChildrenByCase(formData.selectedCase) || [];
+          if (caseParents.length > 0) parentPersons = caseParents;
+          if (caseChildren.length > 0) childPersons = caseChildren;
+        }
+
+        const parentOptions = parentPersons.map(p => p.name);
+        const childOptions = childPersons.map(c => c.name);
+
+        return (
+          <div className="space-y-4">
+            <MultiSelectInput
+              label="Parent Names"
+              values={formData.parentNames || []}
+              options={parentOptions}
+              onChange={(values) => {
+                updateField('parentNames', values);
+              }}
+              disabled={isReadOnly}
+              placeholder="Select parent names..."
+              isLoading={casesLoading}
+            />
+            <MultiSelectInput
+              label="Child Names"
+              values={formData.childNames || []}
+              options={childOptions}
+              onChange={(values) => {
+                updateField('childNames', values);
+              }}
+              disabled={isReadOnly}
+              placeholder="Select child names..."
+              isLoading={casesLoading}
+            />
+          </div>
+        );
+      }
+
+      if (clientType === '0') {
+        // Child type - show child dropdown
+        let childPersons = getAllChildren() || [];
+        
+        if (formData.selectedCase) {
+          const caseChildren = getChildrenByCase(formData.selectedCase) || [];
+          if (caseChildren.length > 0) childPersons = caseChildren;
+        }
+
+        const childOptions = childPersons.map(c => c.name);
+
+        return (
+          <MultiSelectInput
+            label="Child Names"
+            values={formData.childNames || []}
+            options={childOptions}
+            onChange={(values) => {
+              updateField('childNames', values);
+              if (values.length > 0) {
+                updateField('clientName', values.join(', '));
+                const selectedPerson = childPersons.find(c => c.name === values[0]);
+                updateField('clientId', selectedPerson ? String(selectedPerson.id) : '');
+              } else {
+                updateField('clientName', '');
+                updateField('clientId', '');
+              }
+            }}
+            disabled={isReadOnly}
+            placeholder="Select child names..."
+            isLoading={casesLoading}
+          />
+        );
+      }
+
+      if (clientType === '1') {
+        // Parent type - show parent dropdown
+        let parentPersons = getAllParents() || [];
+        
+        if (formData.selectedCase) {
+          const caseParents = getParentsByCase(formData.selectedCase) || [];
+          if (caseParents.length > 0) parentPersons = caseParents;
+        }
+
+        const parentOptions = parentPersons.map(p => p.name);
+
+        return (
+          <MultiSelectInput
+            label="Parent Names"
+            values={formData.parentNames || []}
+            options={parentOptions}
+            onChange={(values) => {
+              updateField('parentNames', values);
+              if (values.length > 0) {
+                updateField('clientName', values.join(', '));
+                const selectedPerson = parentPersons.find(p => p.name === values[0]);
+                updateField('clientId', selectedPerson ? String(selectedPerson.id) : '');
+              } else {
+                updateField('clientName', '');
+                updateField('clientId', '');
+              }
+            }}
+            disabled={isReadOnly}
+            placeholder="Select parent names..."
+            isLoading={casesLoading}
+          />
+        );
+      }
+
+      // Other (type 2) - regular input
+      return (
+        <div>
+          <label className="block text-[11px] font-bold text-slate-600 tracking-wide mb-1.5">
+            <User size={12} /> Client Name *
+          </label>
+          <input 
+            type="text"
+            value={formData.clientName || ''}
+            onChange={(e) => {
+              updateField('clientName', e.target.value);
+              updateField('clientId', e.target.value);
+            }}
+            disabled={isReadOnly}
+            placeholder="Enter client name"
+            required
+            className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white disabled:bg-slate-100/80 focus:outline-none focus:border-blue-500 transition shadow-2xs font-medium"
+          />
+        </div>
+      );
+    }
+
+    // ✅ OFFLINE: Show regular input fields
+    if (isGroup) {
+      return (
+        <div className="space-y-4">
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 tracking-wide mb-1.5">
+              Parent Names
+            </label>
+            <input 
+              type="text"
+              value={formData.parentNames?.join(', ') || ''}
+              onChange={(e) => {
+                const names = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
+                updateField('parentNames', names);
+              }}
+              disabled={isReadOnly}
+              placeholder="Enter parent names (comma separated)"
+              className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white disabled:bg-slate-100/80 focus:outline-none focus:border-blue-500 transition shadow-2xs font-medium"
+            />
+            <p className="text-[10px] text-slate-400 mt-1">Separate multiple names with commas</p>
+          </div>
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 tracking-wide mb-1.5">
+              Child Names
+            </label>
+            <input 
+              type="text"
+              value={formData.childNames?.join(', ') || ''}
+              onChange={(e) => {
+                const names = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
+                updateField('childNames', names);
+              }}
+              disabled={isReadOnly}
+              placeholder="Enter child names (comma separated)"
+              className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white disabled:bg-slate-100/80 focus:outline-none focus:border-blue-500 transition shadow-2xs font-medium"
+            />
+            <p className="text-[10px] text-slate-400 mt-1">Separate multiple names with commas</p>
+          </div>
+        </div>
+      );
+    }
+
+    if (clientType === '0') {
+      return (
+        <div>
+          <label className="block text-[11px] font-bold text-slate-600 tracking-wide mb-1.5">
+            Child Names
+          </label>
+          <input 
+            type="text"
+            value={formData.childNames?.join(', ') || ''}
+            onChange={(e) => {
+              const names = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
+              updateField('childNames', names);
+              if (names.length > 0) {
+                updateField('clientName', names.join(', '));
+                updateField('clientId', names[0]);
+              } else {
+                updateField('clientName', '');
+                updateField('clientId', '');
+              }
+            }}
+            disabled={isReadOnly}
+            placeholder="Enter child names (comma separated)"
+            className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white disabled:bg-slate-100/80 focus:outline-none focus:border-blue-500 transition shadow-2xs font-medium"
+          />
+          <p className="text-[10px] text-slate-400 mt-1">Separate multiple names with commas</p>
+        </div>
+      );
+    }
+
+    if (clientType === '1') {
+      return (
+        <div>
+          <label className="block text-[11px] font-bold text-slate-600 tracking-wide mb-1.5">
+            Parent Names
+          </label>
+          <input 
+            type="text"
+            value={formData.parentNames?.join(', ') || ''}
+            onChange={(e) => {
+              const names = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
+              updateField('parentNames', names);
+              if (names.length > 0) {
+                updateField('clientName', names.join(', '));
+                updateField('clientId', names[0]);
+              } else {
+                updateField('clientName', '');
+                updateField('clientId', '');
+              }
+            }}
+            disabled={isReadOnly}
+            placeholder="Enter parent names (comma separated)"
+            className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white disabled:bg-slate-100/80 focus:outline-none focus:border-blue-500 transition shadow-2xs font-medium"
+          />
+          <p className="text-[10px] text-slate-400 mt-1">Separate multiple names with commas</p>
+        </div>
+      );
+    }
+
+    // Other (type 2)
+    return (
+      <div>
+        <label className="block text-[11px] font-bold text-slate-600 tracking-wide mb-1.5">
+          <User size={12} /> Client Name *
+        </label>
+        <input 
+          type="text"
+          value={formData.clientName || ''}
+          onChange={(e) => {
+            updateField('clientName', e.target.value);
+            updateField('clientId', e.target.value);
+          }}
+          disabled={isReadOnly}
+          placeholder="Enter client name"
+          required
+          className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white disabled:bg-slate-100/80 focus:outline-none focus:border-blue-500 transition shadow-2xs font-medium"
+        />
+      </div>
+    );
+  };
+
+  // Case options for dropdown
+  const caseOptions = cases.map(c => ({
+    value: c.caseName,
+    label: c.caseName
+  }));
+
+  // Team member options for dropdown
+  const teamMemberOptions = teamMembers.map(m => ({
+    value: m,
+    label: m
+  }));
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 text-slate-800 pb-16 antialiased p-2">
@@ -319,7 +813,37 @@ export const NoteFormPage: React.FC = () => {
           </div>
         </div>
 
-        {isReadOnly && (
+        {/* 🟢 Online/Offline Status Badge */}
+        {showStatus && (
+          <div className="flex items-center gap-3">
+            <div className={`flex items-center gap-2 px-3.5 py-2 rounded-full border text-xs font-bold shadow-sm transition-all duration-300 ${
+              isOnline 
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-700' 
+                : 'bg-red-50 border-red-200 text-red-700'
+            }`}>
+              {isOnline ? (
+                <>
+                  <Wifi size={14} className="text-emerald-500" />
+                  <span>Online</span>
+                </>
+              ) : (
+                <>
+                  <WifiOff size={14} className="text-red-500" />
+                  <span>Offline</span>
+                </>
+              )}
+            </div>
+
+            {isReadOnly && (
+              <span className="flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200/60 px-3.5 py-2 rounded-full shadow-2xs animate-pulse">
+                <ShieldCheck size={14} /> Locked Asset (Read-Only)
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* 🟢 Check not done yet */}
+        {!showStatus && isReadOnly && (
           <span className="flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200/60 px-3.5 py-2 rounded-full shadow-2xs animate-pulse">
             <ShieldCheck size={14} /> Locked Asset (Read-Only)
           </span>
@@ -328,6 +852,52 @@ export const NoteFormPage: React.FC = () => {
 
       <form onSubmit={handleSubmit} className="bg-slate-50/60 rounded-2xl p-2 sm:p-4 space-y-6">
         
+        {/* ✅ NEW: Case Selection Section */}
+        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/70 shadow-xs">
+          <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5 mb-4 text-blue-700 font-extrabold text-xs tracking-wider uppercase">
+            <div className="p-1 bg-blue-50 rounded-md"><Briefcase size={14} /></div>
+            <span>Select Case</span>
+            {casesLoading && <span className="text-slate-400 font-normal text-[10px] ml-2">Loading...</span>}
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 tracking-wide mb-1.5">
+              Case Name / Identifier *
+            </label>
+            {isOnline ? (
+              <div className="relative">
+                <select
+                  value={formData.selectedCase || formData.caseName || ''}
+                  onChange={(e) => handleCaseSelect(e.target.value)}
+                  disabled={isReadOnly || casesLoading}
+                  className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 font-medium transition shadow-2xs appearance-none pr-10"
+                >
+                  <option value="">Select a case...</option>
+                  {caseOptions.map(opt => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              </div>
+            ) : (
+              <input 
+                type="text" 
+                value={formData.caseName} 
+                onChange={(e) => updateField('caseName', e.target.value)} 
+                disabled={isReadOnly} 
+                required 
+                placeholder="e.g., 2026-04-R0009, Intake_4350, CASE-2024-001"
+                className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 font-medium transition shadow-2xs" 
+              />
+            )}
+            <p className="text-[10px] text-slate-400 mt-1">
+              {isOnline ? 'Select a case from the list' : 'Offline: Enter case name manually'}
+            </p>
+          </div>
+        </div>
+
         {/* Card 1: Timestamp & Duration */}
         <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/70 shadow-xs grid grid-cols-1 md:grid-cols-3 gap-5">
           <div>
@@ -369,16 +939,16 @@ export const NoteFormPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Card 2: Client Information & Case Name */}
+        {/* Card 2: Client Information */}
         <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/70 shadow-xs">
           <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5 mb-4 text-blue-700 font-extrabold text-xs tracking-wider uppercase">
             <div className="p-1 bg-blue-50 rounded-md"><UserCheck size={14} /></div>
-            <span>Client Information & Case Details</span>
+            <span>Client Information</span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 gap-5">
             <div>
-              <label className="block text-[11px] font-bold text-slate-600 tracking-wide mb-1.5 flex items-center gap-1">
+              <label className="block text-[11px] font-bold text-slate-600 tracking-wide mb-1.5">
                 <Users size={12} /> Client Type *
               </label>
               <CustomSelect 
@@ -389,43 +959,10 @@ export const NoteFormPage: React.FC = () => {
                 placeholder="Select client type"
               />
             </div>
+            
             <div>
-              <label className="block text-[11px] font-bold text-slate-600 tracking-wide mb-1.5 flex items-center gap-1">
-                <User size={12} /> {formData.clientType === '0' ? 'Child Name' : formData.clientType === '1' ? 'Parent Name' : 'Client Name'} *
-              </label>
-              <input 
-                type="text"
-                value={formData.clientName || ''}
-                onChange={(e) => handleClientNameChange(e.target.value)}
-                disabled={isReadOnly}
-                placeholder={
-                  formData.clientType === '0' 
-                    ? "Enter child name" 
-                    : formData.clientType === '1' 
-                      ? "Enter parent name" 
-                      : "Enter client name"
-                }
-                required
-                className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white disabled:bg-slate-100/80 focus:outline-none focus:border-blue-500 transition shadow-2xs font-medium"
-              />
+              {renderClientFields()}
             </div>
-          </div>
-
-          {/* Case Name Input Field */}
-          <div className="mt-5 pt-4 border-t border-slate-100">
-            <label className="block text-[11px] font-bold text-slate-600 tracking-wide mb-1.5 flex items-center gap-1">
-              <Briefcase size={12} /> Case Name / Identifier *
-            </label>
-            <input 
-              type="text" 
-              value={formData.caseName} 
-              onChange={(e) => updateField('caseName', e.target.value)} 
-              disabled={isReadOnly} 
-              required 
-              placeholder="e.g., 2026-04-R0009, Intake_4350, CASE-2024-001"
-              className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 font-medium transition shadow-2xs" 
-            />
-            <p className="text-[10px] text-slate-400 mt-1">Unique identifier for this case (will appear in the case notes list)</p>
           </div>
         </div>
 
@@ -555,18 +1092,41 @@ export const NoteFormPage: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-2">
+            {/* ✅ Updated: Team Member Field with Online/Offline support */}
             <div>
               <label className="block text-[11px] font-bold text-slate-600 tracking-wide mb-1.5 flex items-center gap-1">
                 <Users size={12} /> Team Member
               </label>
-              <input 
-                type="text"
-                value={formData.teamMember}
-                onChange={(e) => updateField('teamMember', e.target.value)}
-                disabled={isReadOnly}
-                placeholder="Enter team member name"
-                className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white disabled:bg-slate-100/80 focus:outline-none focus:border-blue-500 transition shadow-2xs font-medium"
-              />
+              {isOnline && teamMembers.length > 0 ? (
+                <div className="relative">
+                  <select
+                    value={formData.teamMember || ''}
+                    onChange={(e) => updateField('teamMember', e.target.value)}
+                    disabled={isReadOnly || teamMembersLoading}
+                    className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 font-medium transition shadow-2xs appearance-none pr-10"
+                  >
+                    <option value="">Select team member...</option>
+                    {teamMemberOptions.map(opt => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                </div>
+              ) : (
+                <input 
+                  type="text"
+                  value={formData.teamMember || ''}
+                  onChange={(e) => updateField('teamMember', e.target.value)}
+                  disabled={isReadOnly}
+                  placeholder={isOnline ? 'No team members found' : 'Enter team member name'}
+                  className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white disabled:bg-slate-100/80 focus:outline-none focus:border-blue-500 transition shadow-2xs font-medium"
+                />
+              )}
+              <p className="text-[10px] text-slate-400 mt-1">
+                {isOnline ? 'Select from available team members' : 'Offline: Enter team member name manually'}
+              </p>
             </div>
             <div>
               <label className="block text-[11px] font-bold text-slate-600 tracking-wide mb-1.5">Other Attendees</label>

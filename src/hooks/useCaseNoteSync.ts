@@ -1,129 +1,136 @@
-// hooks/useCaseNoteSync.ts
-import { useState, useCallback, useEffect } from 'react';
-import { syncSingleNote, checkAPIHealth, type SyncResponse } from '../services/caseNoteApiForLive';
+import { useState } from 'react';
+
+import { 
+  syncSingleNote, 
+  checkAPIHealth, 
+  syncMultipleNotes,
+  getCaseNoteApiConfig,
+  testApiConnection
+} from '../services/caseNoteApiForLive';
+import type { CaseNote } from '../types/caseNote';
+
+interface SyncResult {
+  success: boolean;
+  message: string;
+  syncedId?: number;
+  caseNumber?: string;
+}
+
+interface SyncProgress {
+  current: number;
+  total: number;
+}
 
 export const useCaseNoteSync = () => {
+  const [syncProgress, setSyncProgress] = useState<SyncProgress>({ current: 0, total: 0 });
   const [isSyncing, setIsSyncing] = useState(false);
-  const [syncProgress, setSyncProgress] = useState({ current: 0, total: 0 });
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [lastSyncResult, setLastSyncResult] = useState<SyncResponse | null>(null);
+  const [apiConfig, setApiConfig] = useState(() => getCaseNoteApiConfig());
 
-  useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-    
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
+  // Check API connectivity using your API service
+  const checkAPI = async (): Promise<boolean> => {
+    return await checkAPIHealth();
+  };
 
-  // একক নোট সিঙ্ক - সঠিক payload তৈরি করবে
-  const syncNote = useCallback(async (caseNumber: string, noteData: any): Promise<SyncResponse> => {
-    if (!isOnline) {
-      return { success: false, message: 'No internet connection' };
-    }
+  // Test API connection
+  const testConnection = async (): Promise<{ success: boolean; message: string }> => {
+    return await testApiConnection();
+  };
 
-    setIsSyncing(true);
+  // Get API configuration
+  const getConfig = () => {
+    return getCaseNoteApiConfig();
+  };
+
+  // Sync single note
+  const syncNote = async (caseNumber: string, localNote: any): Promise<SyncResult> => {
     try {
-      // Ensure noteData has all required fields
-      const enhancedNoteData = {
-        ...noteData,
-        // Make sure these fields exist with proper values
-        appointmentStatus: noteData.appointmentStatus || 'Completed',
-        contactType: noteData.contactType || '2',  // Face to Face default
-        location: noteData.location || '4',         // School default
-        serviceType: noteData.serviceType || '7',   // Child Contact default
-        additionalServices: noteData.additionalServices || [],
-        narrative: noteData.narrative || noteData.notes || '',
-        notifyTeam: noteData.notifyTeam || false,
-        teamMember: noteData.teamMember || 'System',
-        durationMinutes: noteData.durationMinutes || 30,
-      };
+      console.log('📤 Syncing note to server:', { caseNumber, localNote });
+
+      // ✅ Use your API service to sync
+      const result = await syncSingleNote(caseNumber, localNote);
       
-      const result = await syncSingleNote(caseNumber, enhancedNoteData);
-      setLastSyncResult(result);
+      console.log('📤 Sync result:', result);
       return result;
-    } catch (error: any) {
-      console.error('Sync note error:', error);
+    } catch (error) {
+      console.error('❌ Sync error:', error);
       return {
         success: false,
-        message: error.message || 'Sync failed',
+        message: error instanceof Error ? error.message : 'Unknown error occurred'
       };
-    } finally {
-      setIsSyncing(false);
     }
-  }, [isOnline]);
+  };
 
-  // সব নোট সিঙ্ক
-  const syncAllLocalNotes = useCallback(async (notes: any[]) => {
-    if (!isOnline) {
-      return { success: false, message: 'No internet connection', synced: 0, failed: notes.length };
-    }
-
-    if (!notes || notes.length === 0) {
-      return { success: true, message: 'No notes to sync', synced: 0, failed: 0 };
-    }
-
+  // Sync all local notes
+  const syncAllLocalNotes = async (allNotes: CaseNote[]): Promise<SyncResult> => {
+    setSyncProgress({ current: 0, total: allNotes.length });
     setIsSyncing(true);
-    setSyncProgress({ current: 0, total: notes.length });
+
+    let successCount = 0;
+    let errors: string[] = [];
 
     try {
-      let synced = 0;
-      let failed = 0;
-      const failedNotes: any[] = [];
+      // Use bulk sync for better performance
+      if (allNotes.length > 1) {
+        const bulkResult = await syncMultipleNotes(allNotes);
+        return {
+          success: bulkResult.success,
+          message: `Synced ${bulkResult.totalSynced}/${allNotes.length} notes successfully`,
+        };
+      }
 
-      for (let i = 0; i < notes.length; i++) {
-        const note = notes[i];
-        if (!note) continue;
-        
-        const caseNumber = note.caseName || note.caseNumber || 'DEFAULT-CASE';
-        
-        console.log(`Syncing note ${i + 1}/${notes.length} - Case: ${caseNumber}`);
-        
-        const result = await syncSingleNote(caseNumber, note);
-        if (result.success) {
-          synced++;
-          console.log(`✅ Note synced successfully! Server ID: ${result.syncedId}`);
-        } else {
-          failed++;
-          failedNotes.push({ note, error: result.message });
-          console.error(`❌ Failed to sync note: ${result.message}`);
+      // Single note sync
+      for (let i = 0; i < allNotes.length; i++) {
+        const note = allNotes[i];
+        setSyncProgress({ current: i + 1, total: allNotes.length });
+
+        try {
+          const caseNumber = note.caseName || 'DEFAULT-CASE';
+          const result = await syncNote(caseNumber, note);
+          
+          if (result.success) {
+            successCount++;
+          } else {
+            errors.push(`Note ${note.id}: ${result.message}`);
+          }
+        } catch (error) {
+          errors.push(`Note ${note.id}: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
-        setSyncProgress({ current: i + 1, total: notes.length });
       }
 
-      if (failed > 0) {
-        console.warn(`Sync completed with ${failed} failures:`, failedNotes);
+      const message = `Synced ${successCount}/${allNotes.length} notes successfully`;
+      
+      if (errors.length > 0) {
+        console.warn('⚠️ Some notes failed to sync:', errors);
+        return {
+          success: successCount > 0,
+          message: `${message}. ${errors.length} failed.`
+        };
       }
 
-      return { 
-        success: failed === 0, 
-        synced, 
-        failed, 
-        message: `Synced: ${synced}, Failed: ${failed}`,
-        failedNotes 
+      return {
+        success: true,
+        message: message
+      };
+    } catch (error) {
+      console.error('❌ Sync all error:', error);
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to sync all notes'
       };
     } finally {
       setIsSyncing(false);
       setSyncProgress({ current: 0, total: 0 });
     }
-  }, [isOnline]);
-
-  const checkAPI = useCallback(async (): Promise<boolean> => {
-    return await checkAPIHealth();
-  }, []);
+  };
 
   return {
-    isSyncing,
     syncProgress,
-    isOnline,
-    lastSyncResult,
+    isSyncing,
     syncNote,
     syncAllLocalNotes,
     checkAPI,
+    testConnection,
+    getConfig, // ✅ Added getConfig to return object
+    apiConfig
   };
 };
