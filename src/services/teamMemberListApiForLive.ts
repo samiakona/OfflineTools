@@ -34,7 +34,7 @@ export const getTeamMembers = async (): Promise<string[]> => {
     headers: {
       'Content-Type': 'application/json',
     },
-    credentials: 'include', // Projon hole ekhane Auth token dite paren
+    credentials: 'include',
   });
 
   if (!response.ok) {
