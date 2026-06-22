@@ -1,10 +1,7 @@
 import type { CaseData } from "../types/caseNote";
 
-// Jokhon live jaben, tokhon shudhu ei URL-ti bodle phelben
 const BASE_URL = 'https://localhost:44361/api/OfflineSync';
-const getChildAndParentInfo = `${BASE_URL}/GetAllChildOrParentInfo`;
 
-// Toggle Flag: true thakle mock data cholbe, false korle live API kaj korbe
 const isMock = false; 
 
 // // Mock Data ekhanei thakbe
